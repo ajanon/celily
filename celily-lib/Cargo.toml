@@ -1,0 +1,25 @@
+[package]
+name = "celily-lib"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/ajanon/celily"
+description = "Shared library for celily — launch ephemeral, network-isolated containers"
+keywords = ["lxd", "incus", "container", "isolation", "sandbox"]
+readme = "README.md"
+authors = ["Alexis Janon"]
+
+[lints.clippy]
+pedantic = "warn"
+missing_errors_doc = "allow"
+
+[dependencies]
+anyhow = "1"
+bon = "3"
+nix = { version = "0.31", features = ["user", "signal", "process"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+strum = { version = "0.27", features = ["derive"] }
+thiserror = "2"
+tracing = "0.1"
+uuid = { version = "1", features = ["v4"] }

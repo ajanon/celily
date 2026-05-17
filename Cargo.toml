@@ -1,0 +1,3 @@
+[workspace]
+members = ["celily", "celily-lib"]
+resolver = "2"
