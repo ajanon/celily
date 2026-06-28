@@ -4,6 +4,7 @@ use std::path::Path;
 use super::LxcBackend;
 use crate::backend::{Device, InstanceConfig};
 use crate::command::{CommandError, CommandExt};
+use crate::mount::AccessMode;
 
 impl crate::backend::InstanceBackend for LxcBackend {
     type Error = CommandError;
@@ -87,7 +88,7 @@ impl crate::backend::InstanceBackend for LxcBackend {
             Device::Disk {
                 source,
                 target,
-                readonly,
+                access,
             } => {
                 let source_arg = format!("source={}", source.display());
                 let path_arg = format!("path={}", target.display());
@@ -101,7 +102,7 @@ impl crate::backend::InstanceBackend for LxcBackend {
                     &source_arg,
                     &path_arg,
                 ];
-                if !*readonly {
+                if access == &AccessMode::ReadOnly {
                     args.push("readonly=true");
                 }
                 self.lxc_project_command().args(&args).run()

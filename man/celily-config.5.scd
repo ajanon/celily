@@ -394,15 +394,15 @@ underneath them regardless of the allowlists.
 	Mount point inside the container. A leading *~* expands to the container
 	home directory (_/home/_*user* or _/root_ with *--root*).
 
-*readwrite* = _bool_ (optional)
-	Set to *true* for read-write access. Default: false (read-only).
+*access* = _string_ (optional)
+	Set to *"readwrite"* for read-write access. Default: *"readonly"*.
 
 Example:
 ```
 [[mounts]]
 source = "~/.pi"
 target = "~/.pi"
-readwrite = true
+access = "readwrite"
 
 [[mounts]]
 source = "~/Projects/client"

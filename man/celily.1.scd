@@ -37,10 +37,12 @@ from *celily-config*(5).
 *--vm*
 	Run as a VM instead of a container. Default: from _vm_, then false.
 
-*--mount* _SOURCE_*:*_TARGET_[*:readwrite*]
+*--mount* _SOURCE_*:*_TARGET_[*:readwrite*|*:readonly*]
 	Bind-mount a host directory into the container. Repeatable. Source paths
 	starting with *~* expand to the host home directory; target paths starting
 	with *~* expand to the container home directory.
+	The optional third field sets the access mode: *readwrite* or *readonly*.
+	Read-only is the default when omitted.
 	*Every mount source must be under the current user's $HOME directory
 	and must be listed exactly in* _allowed_dirs_ *or* _allowed_files_ *(see*
 	*celily-config*(5)*).* *$HOME*, *$XDG_CONFIG_HOME*, *~/.local*,

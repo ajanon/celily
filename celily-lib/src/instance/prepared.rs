@@ -164,7 +164,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
                 let device = Device::Disk {
                     source: mount.source.clone(),
                     target: mount.target.clone(),
-                    readonly: !mount.readwrite,
+                    access: mount.access,
                 };
                 self.instance_backend
                     .add_device(&self.config.name, &dev_name, &device)

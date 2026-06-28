@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
-use celily_lib::{CommandExt, InstanceKind, Mount, NetworkRule};
+use celily_lib::{AccessMode, CommandExt, InstanceKind, Mount, NetworkRule};
 
 use crate::cli::Args;
 use crate::config::{Config, WorktreeConfig};
@@ -162,19 +162,19 @@ pub fn resolve_context(
         mounts.push(Mount {
             source: cwd.to_path_buf(),
             target: project_target.clone(),
-            readwrite: false,
+            access: AccessMode::ReadOnly,
         });
     }
 
     mounts.extend(cfg.mounts.iter().map(|m| Mount {
         source: expand_host_tilde(&m.source, home),
         target: expand_container_tilde(&m.target, &container_home),
-        readwrite: m.readwrite,
+        access: m.access,
     }));
     mounts.extend(args.cli_mounts.iter().map(|m| Mount {
         source: expand_host_tilde(&m.source, home),
         target: expand_container_tilde(&m.target, &container_home),
-        readwrite: m.readwrite,
+        access: m.access,
     }));
 
     // Pre-canonicalize allowlists once so validate_mount_source doesn't
@@ -290,7 +290,7 @@ pub fn resolve_context(
     if worktree_enabled {
         // Project mount is read-only by default; force it explicitly
         // when worktree mode is active (belt and suspenders).
-        mounts[0].readwrite = false;
+        mounts[0].access = AccessMode::ReadOnly;
         // Overlay .git read-write. Placed second in the mounts list
         // so LXD applies it after the read-only project mount.
         //
@@ -326,12 +326,12 @@ pub fn resolve_context(
             Mount {
                 source: git_canon,
                 target: project_target.join(".git"),
-                readwrite: true,
+                access: AccessMode::ReadWrite,
             },
         );
     } else if mount_project && !effective_readonly {
         // User explicitly opted out of read-only for the project mount.
-        mounts[0].readwrite = true;
+        mounts[0].access = AccessMode::ReadWrite;
     }
 
     Ok(RunContext {
