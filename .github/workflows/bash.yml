@@ -1,0 +1,33 @@
+name: Bash
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-slim
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install shfmt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shfmt
+      - name: Lint shell scripts
+        run: |
+          # Ignore SC2154 warnings for unassigned input variables
+          find . -name '*.sh' -not -path './.git/*' \
+            -exec shellcheck --enable=all -eSC2154 {} \+
+
+          shfmt -l --indent=4 .
