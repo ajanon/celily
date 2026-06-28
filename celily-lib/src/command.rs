@@ -2,7 +2,7 @@ use std::process::Command;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use nix::sys::signal::{kill, Signal};
+use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 use tracing::trace;
 

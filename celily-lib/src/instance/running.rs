@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use super::{Instance, InstanceError, InstanceGuard};
 use crate::backend::{InstanceBackend, NetworkBackend};
 use crate::network::NetworkIsolation;
-
-use super::{Instance, InstanceError, InstanceGuard};
 
 // ---------------------------------------------------------------------------
 // Running state
@@ -38,14 +37,25 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Running<IB>> {
         env: &HashMap<String, String>,
         cwd: Option<&Path>,
     ) -> Result<i32, InstanceError<IB::Error>> {
-        let proxy_url = format!("http://{}:{}", self.state.proxy_gateway, self.state.proxy_port);
+        let proxy_url = format!(
+            "http://{}:{}",
+            self.state.proxy_gateway, self.state.proxy_port
+        );
         let cwd = cwd.unwrap_or(&self.config.container_home);
 
-        let code = self.instance_backend.exec(
-            &self.config.name, command, env, cwd,
-            self.config.exec_uid, self.config.exec_gid,
-            Some(&self.config.container_home), Some(&proxy_url),
-        ).map_err(|e| InstanceError::backend("failed to run lxc exec", e))?;
+        let code = self
+            .instance_backend
+            .exec(
+                &self.config.name,
+                command,
+                env,
+                cwd,
+                self.config.exec_uid,
+                self.config.exec_gid,
+                Some(&self.config.container_home),
+                Some(&proxy_url),
+            )
+            .map_err(|e| InstanceError::backend("failed to run lxc exec", e))?;
 
         Ok(code)
     }

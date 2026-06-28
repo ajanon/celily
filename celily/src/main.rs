@@ -5,26 +5,20 @@ mod notifications;
 mod util;
 mod validate;
 
-use std::path::PathBuf;
 use std::env;
-
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Context;
-use clap::Parser;
-
 use celily_lib::backend::lxd::LxcBackend;
 use celily_lib::{Instance, InstanceKind, Limits, NetworkParams, Providers, SecretProvider};
-use tracing::level_filters::LevelFilter;
+use clap::Parser;
 use tracing::info;
+use tracing::level_filters::LevelFilter;
 
 use crate::cli::Args;
 use crate::config::BackendKind;
-use crate::context::{
-    build_worktree_init_script,
-    resolve_context,
-    resolve_git_identity,
-};
+use crate::context::{build_worktree_init_script, resolve_context, resolve_git_identity};
 use crate::util::{bridge_name, shell_escape};
 
 /// Top-level application logic: load config, resolve context, build
@@ -172,9 +166,9 @@ fn run() -> anyhow::Result<i32> {
         let trimmed = script.trim();
         if !trimmed.is_empty() {
             let wrapper = format!(
-                "cat > /tmp/celily-pre-run <<'CELILY_EOF'\n{trimmed}\nCELILY_EOF\n\
-                 chmod +x /tmp/celily-pre-run && /tmp/celily-pre-run; \
-                 rc=$?; rm -f /tmp/celily-pre-run; exit $rc"
+                "cat > /tmp/celily-pre-run <<'CELILY_EOF'\n{trimmed}\nCELILY_EOF\nchmod +x \
+                 /tmp/celily-pre-run && /tmp/celily-pre-run; rc=$?; rm -f /tmp/celily-pre-run; \
+                 exit $rc"
             );
             let code = running.exec(
                 &["sh".into(), "-c".into(), wrapper],
@@ -197,11 +191,7 @@ fn run() -> anyhow::Result<i32> {
     // --- Worktree or direct execution ---
     let code = if ctx.worktree_enabled {
         let worktree_name = args.worktree.as_ref().unwrap();
-        let branch_template = cfg
-            .worktree
-            .branch
-            .as_deref()
-            .unwrap_or("celily/{name}");
+        let branch_template = cfg.worktree.branch.as_deref().unwrap_or("celily/{name}");
         let branch_name = branch_template.replace("{name}", &worktree_name);
 
         crate::validate::validate_worktree_preconditions(&cwd, &branch_name)?;
@@ -222,12 +212,7 @@ fn run() -> anyhow::Result<i32> {
             &project_path,
         );
 
-        let mut full_cmd: Vec<String> = vec![
-            "sh".into(),
-            "-c".into(),
-            init_script,
-            "--".into(),
-        ];
+        let mut full_cmd: Vec<String> = vec!["sh".into(), "-c".into(), init_script, "--".into()];
         full_cmd.extend(raw_command);
 
         running.exec(&full_cmd, &env_map, Some(&ctx.project_dir))?

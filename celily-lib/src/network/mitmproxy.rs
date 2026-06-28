@@ -11,12 +11,11 @@ use std::{env, fs};
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
 
+use super::params::{DNS_PORT, PROXY_PORT};
+use super::rule::NetworkRule;
 use crate::command::{ChildExt, ShutdownStatus};
 use crate::secrets::{SecretError, SecretProvider};
 use crate::{CleanupDir, CleanupPath};
-
-use super::params::{PROXY_PORT, DNS_PORT};
-use super::rule::NetworkRule;
 
 // ---------------------------------------------------------------------------
 // MitmProxyError
@@ -103,34 +102,28 @@ impl MitmProxy {
         allow: &[NetworkRule],
         provider: Option<&dyn SecretProvider<Error = SecretError>>,
     ) -> Result<(Self, String), MitmProxyError> {
-        let runtime_dir = PathBuf::from(
-            env::var("XDG_RUNTIME_DIR")
-                .map_err(|_| MitmProxyError::MissingEnv { var: "XDG_RUNTIME_DIR" })?,
-        );
-        let state_dir = PathBuf::from(
-            env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
-                let home = env::var("HOME").unwrap_or_default();
-                format!("{home}/.local/state")
-            }),
-        );
+        let runtime_dir =
+            PathBuf::from(
+                env::var("XDG_RUNTIME_DIR").map_err(|_| MitmProxyError::MissingEnv {
+                    var: "XDG_RUNTIME_DIR",
+                })?,
+            );
+        let state_dir = PathBuf::from(env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
+            let home = env::var("HOME").unwrap_or_default();
+            format!("{home}/.local/state")
+        }));
 
         // --- Confdir (mitmdump's certificate store) ---
         let confdir = runtime_dir.join(format!("celily-mitmproxy-{bridge_name}"));
         fs::create_dir_all(&confdir).map_err(|e| {
-            MitmProxyError::io_ctx(
-                format!("failed to create confdir {}", confdir.display()),
-                e,
-            )
+            MitmProxyError::io_ctx(format!("failed to create confdir {}", confdir.display()), e)
         })?;
         let confdir_cleanup = CleanupDir::new(confdir.clone());
 
         // --- Log file ---
         let log_dir = state_dir.join("celily/logs");
         fs::create_dir_all(&log_dir).map_err(|e| {
-            MitmProxyError::io_ctx(
-                format!("failed to create log dir {}", log_dir.display()),
-                e,
-            )
+            MitmProxyError::io_ctx(format!("failed to create log dir {}", log_dir.display()), e)
         })?;
         let log_path = log_dir.join(format!("mitmdump_{bridge_name}.log"));
         let log_file = fs::File::create(&log_path).map_err(|e| {
@@ -178,9 +171,11 @@ impl MitmProxy {
                 "2",
             ])
             .env("CELILY_CONFIG_SOCKET", &socket_path)
-            .stdout(log_file.try_clone().map_err(|e| {
-                MitmProxyError::io_ctx("failed to clone log file handle", e)
-            })?)
+            .stdout(
+                log_file
+                    .try_clone()
+                    .map_err(|e| MitmProxyError::io_ctx("failed to clone log file handle", e))?,
+            )
             .stderr(log_file)
             .spawn()
             .map_err(|e| MitmProxyError::io_ctx("failed to spawn mitmdump", e))?;
@@ -345,10 +340,7 @@ impl MitmProxy {
                     sleep(Duration::from_millis(50));
                 },
                 Err(e) => {
-                    return Err(MitmProxyError::io_ctx(
-                        "accept on config socket failed",
-                        e,
-                    ));
+                    return Err(MitmProxyError::io_ctx("accept on config socket failed", e));
                 },
             }
         };

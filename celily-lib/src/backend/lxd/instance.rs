@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use super::LxcBackend;
 use crate::backend::{Device, InstanceConfig};
 use crate::command::{CommandError, CommandExt};
-
-use super::LxcBackend;
 
 impl crate::backend::InstanceBackend for LxcBackend {
     type Error = CommandError;
@@ -78,38 +77,61 @@ impl crate::backend::InstanceBackend for LxcBackend {
     }
 
     fn delete(&self, name: &str) -> Result<(), Self::Error> {
-        self.lxc_project_command().args(["delete", "--force", name]).run()
+        self.lxc_project_command()
+            .args(["delete", "--force", name])
+            .run()
     }
 
     fn add_device(&self, name: &str, dev_name: &str, device: &Device) -> Result<(), Self::Error> {
         match device {
-            Device::Disk { source, target, readonly } => {
+            Device::Disk {
+                source,
+                target,
+                readonly,
+            } => {
                 let source_arg = format!("source={}", source.display());
                 let path_arg = format!("path={}", target.display());
                 let mut args = vec![
-                    "config", "device", "add", name, dev_name, "disk",
-                    &source_arg, &path_arg,
+                    "config",
+                    "device",
+                    "add",
+                    name,
+                    dev_name,
+                    "disk",
+                    &source_arg,
+                    &path_arg,
                 ];
                 if !*readonly {
                     args.push("readonly=true");
                 }
                 self.lxc_project_command().args(&args).run()
-            }
-            Device::Proxy { socket_path, listen_path, uid, gid, host_uid, host_gid } => {
-                self.lxc_project_command()
-                    .args([
-                        "config", "device", "add", name, dev_name, "proxy",
-                        "bind=container",
-                        &format!("connect=unix:{socket_path}"),
-                        &format!("listen=unix:{listen_path}"),
-                        "mode=0600",
-                        &format!("uid={uid}"),
-                        &format!("gid={gid}"),
-                        &format!("security.uid={host_uid}"),
-                        &format!("security.gid={host_gid}"),
-                    ])
-                    .run()
-            }
+            },
+            Device::Proxy {
+                socket_path,
+                listen_path,
+                uid,
+                gid,
+                host_uid,
+                host_gid,
+            } => self
+                .lxc_project_command()
+                .args([
+                    "config",
+                    "device",
+                    "add",
+                    name,
+                    dev_name,
+                    "proxy",
+                    "bind=container",
+                    &format!("connect=unix:{socket_path}"),
+                    &format!("listen=unix:{listen_path}"),
+                    "mode=0600",
+                    &format!("uid={uid}"),
+                    &format!("gid={gid}"),
+                    &format!("security.uid={host_uid}"),
+                    &format!("security.gid={host_gid}"),
+                ])
+                .run(),
         }
     }
 
@@ -121,8 +143,11 @@ impl crate::backend::InstanceBackend for LxcBackend {
         network_egress: Option<&str>,
     ) -> Result<(), Self::Error> {
         let mut args = vec![
-            "config".to_string(), "device".to_string(), "add".to_string(),
-            name.to_string(), "eth0".to_string(),
+            "config".to_string(),
+            "device".to_string(),
+            "add".to_string(),
+            name.to_string(),
+            "eth0".to_string(),
             "nic".to_string(),
             "nictype=bridged".to_string(),
             format!("parent={bridge_name}"),
@@ -138,7 +163,13 @@ impl crate::backend::InstanceBackend for LxcBackend {
 
     fn set_description(&self, name: &str, desc: &str) -> Result<(), Self::Error> {
         self.lxc_project_command()
-            .args(["config", "set", name, "--property", &format!("description={desc}")])
+            .args([
+                "config",
+                "set",
+                name,
+                "--property",
+                &format!("description={desc}"),
+            ])
             .run()
     }
 
@@ -154,10 +185,14 @@ impl crate::backend::InstanceBackend for LxcBackend {
         proxy_url: Option<&str>,
     ) -> Result<i32, Self::Error> {
         let mut cmd = self.lxc_project_command();
-        cmd.arg("exec").arg(name)
-            .arg("--user").arg(uid.to_string())
-            .arg("--group").arg(gid.to_string())
-            .arg("--cwd").arg(cwd);
+        cmd.arg("exec")
+            .arg(name)
+            .arg("--user")
+            .arg(uid.to_string())
+            .arg("--group")
+            .arg(gid.to_string())
+            .arg("--cwd")
+            .arg(cwd);
 
         for (k, v) in env {
             cmd.arg("--env").arg(format!("{k}={v}"));
@@ -200,20 +235,34 @@ impl crate::backend::InstanceBackend for LxcBackend {
         use std::process::Stdio;
 
         let dest = format!("{name}/{path}");
-        let mut child = self.lxc_project_command()
+        let mut child = self
+            .lxc_project_command()
             .args([
-                "file", "push", "-", &dest,
-                "--create-dirs", "--mode", mode,
-                "--uid", &uid.to_string(), "--gid", &gid.to_string(),
+                "file",
+                "push",
+                "-",
+                &dest,
+                "--create-dirs",
+                "--mode",
+                mode,
+                "--uid",
+                &uid.to_string(),
+                "--gid",
+                &gid.to_string(),
             ])
             .stdin(Stdio::piped())
             .spawn()
             .map_err(CommandError::Io)?;
 
-        child.stdin.take()
-            .ok_or_else(|| CommandError::Io(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe, "stdin pipe failed",
-            )))?
+        child
+            .stdin
+            .take()
+            .ok_or_else(|| {
+                CommandError::Io(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "stdin pipe failed",
+                ))
+            })?
             .write_all(content)
             .map_err(CommandError::Io)?;
 

@@ -79,7 +79,11 @@ pub(crate) struct NetworkAcl {
 
 impl NetworkAcl {
     /// Create a new, empty network ACL.
-    pub(crate) fn create(lxd: Arc<LxcBackend>, name: &str, keep: bool) -> Result<Self, CommandError> {
+    pub(crate) fn create(
+        lxd: Arc<LxcBackend>,
+        name: &str,
+        keep: bool,
+    ) -> Result<Self, CommandError> {
         let name = name.to_string();
         lxd.create_acl(&name)?;
         info!(acl = %name, "created network ACL");
@@ -154,8 +158,8 @@ pub(crate) fn rule_to_cli_args(rule: &NetworkAclRule) -> Vec<String> {
 ///
 /// Returns:
 /// - A TCP allow rule to the gateway on the proxy port (HTTP proxy).
-/// - DNS UDP and TCP allow rules (restricted to the gateway when
-///   `dns` is `true`, unrestricted otherwise).
+/// - DNS UDP and TCP allow rules (restricted to the gateway when `dns` is
+///   `true`, unrestricted otherwise).
 /// - One TCP allow rule per entry in `allow_tcp`.
 pub(crate) fn build_rules_from_params(
     params: &crate::backend::CreateBridgeParams,

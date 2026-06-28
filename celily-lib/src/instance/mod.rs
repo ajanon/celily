@@ -3,14 +3,13 @@ pub mod initialized;
 pub mod prepared;
 pub mod running;
 
+use std::path::PathBuf;
+use std::sync::Arc;
+
 pub use guard::InstanceGuard;
 pub use initialized::Initialized;
 pub use prepared::Prepared;
 pub use running::Running;
-
-use std::path::PathBuf;
-use std::sync::Arc;
-
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -18,8 +17,8 @@ use crate::backend::{InstanceBackend, NetworkBackend};
 use crate::distro::DistroKind;
 use crate::limits::Limits;
 use crate::mount::Mount;
-use crate::network::params::NetworkParams;
 use crate::network::NetworkError;
+use crate::network::params::NetworkParams;
 use crate::secrets::{SecretError, SecretProvider};
 
 // ---------------------------------------------------------------------------

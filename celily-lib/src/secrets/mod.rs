@@ -8,8 +8,8 @@ pub enum SecretError {
     /// An `auth.secret` references a named secret but no provider is
     /// configured.
     #[error(
-        "auth.secret '{secret}' requires a secret provider, but none is configured \
-         (set secret_provider in your config)"
+        "auth.secret '{secret}' requires a secret provider, but none is configured (set \
+         secret_provider in your config)"
     )]
     NoProvider { secret: String },
     /// The `rbw` backend returned an error.

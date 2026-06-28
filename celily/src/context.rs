@@ -5,9 +5,9 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use celily_lib::{CommandExt, InstanceKind, Mount, NetworkRule};
-use crate::config::{Config, WorktreeConfig};
 
 use crate::cli::Args;
+use crate::config::{Config, WorktreeConfig};
 use crate::util::{
     expand_container_tilde,
     expand_host_tilde,
@@ -104,14 +104,8 @@ pub fn resolve_context(
     let network_ingress = cfg.limits.network_ingress.clone();
     let network_egress = cfg.limits.network_egress.clone();
 
-    let container_uid = args
-        .container_uid
-        .or(cfg.container_uid)
-        .unwrap_or(1000);
-    let container_gid = args
-        .container_gid
-        .or(cfg.container_gid)
-        .unwrap_or(1000);
+    let container_uid = args.container_uid.or(cfg.container_uid).unwrap_or(1000);
+    let container_gid = args.container_gid.or(cfg.container_gid).unwrap_or(1000);
     let user_name = args
         .user
         .clone()
@@ -571,7 +565,13 @@ mod tests {
     #[test]
     fn init_script_escapes_special_chars() {
         // Branch name with a single-quote should be shell-escaped.
-        let script = build_worktree_init_script("celily/it's-fine", true, "instance", "it's-fine", "'~/project'");
+        let script = build_worktree_init_script(
+            "celily/it's-fine",
+            true,
+            "instance",
+            "it's-fine",
+            "'~/project'",
+        );
         // The branch name should be single-quoted.
         assert!(script.contains("'celily/it'"));
     }

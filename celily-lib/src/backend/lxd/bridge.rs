@@ -10,8 +10,7 @@
 //! [`set_raw_dnsmasq`](LxdBridge::set_raw_dnsmasq) are the building blocks.
 
 use std::net::IpAddr;
-use std::sync::Arc;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use tracing::{error, info};
 
@@ -32,7 +31,11 @@ impl LxdBridge {
     /// is in place. The gateway IP is queried lazily on first call to
     /// [`get_gateway_ip`](Self::get_gateway_ip) -- the split guarantees that
     /// `Drop` still runs and destroys the bridge if any later step fails.
-    pub(crate) fn create(lxd: Arc<LxcBackend>, name: &str, keep: bool) -> Result<Self, CommandError> {
+    pub(crate) fn create(
+        lxd: Arc<LxcBackend>,
+        name: &str,
+        keep: bool,
+    ) -> Result<Self, CommandError> {
         let name = name.to_string();
         lxd.create_network(&name)?;
         info!(bridge = %name, "created isolation bridge");

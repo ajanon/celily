@@ -1,7 +1,7 @@
-pub mod instance;
-pub mod network;
 mod acl;
 mod bridge;
+pub mod instance;
+pub mod network;
 
 use crate::command::{CommandError, CommandExt};
 
@@ -58,16 +58,22 @@ impl LxcBackend {
             return Ok(());
         };
 
-        match self.lxc_project_command()
+        match self
+            .lxc_project_command()
             .args([
-                "project", "create", project,
-                "--config", "features.images=true",
+                "project",
+                "create",
+                project,
+                "--config",
+                "features.images=true",
             ])
             .run()
         {
             Ok(()) => {},
             Err(CommandError::NonZero { ref stderr, .. })
-                if stderr.as_deref().is_some_and(|s| s.contains("already exists")) => {},
+                if stderr
+                    .as_deref()
+                    .is_some_and(|s| s.contains("already exists")) => {},
             Err(e) => return Err(e),
         }
 
@@ -76,9 +82,15 @@ impl LxcBackend {
         // then set the pool if it already does (pool may have changed).
         //
         // The profile is otherwise empty -- no bridge NIC, clean.
-        let root_res = self.lxc_project_command()
+        let root_res = self
+            .lxc_project_command()
             .args([
-                "profile", "device", "add", "default", "root", "disk",
+                "profile",
+                "device",
+                "add",
+                "default",
+                "root",
+                "disk",
                 "path=/",
                 &format!("pool={}", self.pool),
             ])
@@ -87,14 +99,15 @@ impl LxcBackend {
         match root_res {
             Ok(()) => {},
             Err(CommandError::NonZero { ref stderr, .. })
-                if stderr.as_deref().is_some_and(|s| s.contains("already exists")) =>
+                if stderr
+                    .as_deref()
+                    .is_some_and(|s| s.contains("already exists")) =>
             {
                 // Device exists from a previous run -- set the pool
                 // to reconcile in case it changed.
                 self.lxc_project_command()
                     .args([
-                        "profile", "device", "set", "default", "root",
-                        "pool", &self.pool,
+                        "profile", "device", "set", "default", "root", "pool", &self.pool,
                     ])
                     .run()?;
             },

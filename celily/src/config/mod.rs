@@ -7,17 +7,15 @@ pub mod worktree;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use celily_lib::{DistroKind, InstanceKind, Mount};
 use serde::Deserialize;
 use tracing::{info, warn};
 
 pub use self::backend::{BackendConfig, BackendKind};
 pub use self::limits::Limits;
 pub use self::network::NetworkConfig;
-pub use self::worktree::WorktreeConfig;
-use celily_lib::DistroKind;
 use self::validation::{validate_config_dirs, validate_node_permissions};
-use celily_lib::InstanceKind;
-use celily_lib::Mount;
+pub use self::worktree::WorktreeConfig;
 use crate::util::{expand_host_tilde, is_under_or_eq};
 
 #[derive(Debug, thiserror::Error)]
@@ -311,8 +309,8 @@ impl Config {
         loop {
             if !visited.insert(current.clone()) {
                 return Err(ConfigError::Validation(format!(
-                    "circular inheritance: profile '{current}' appears more than once in \
-                     the inheritance chain"
+                    "circular inheritance: profile '{current}' appears more than once in the \
+                     inheritance chain"
                 )));
             }
             chain.push(current.clone());
@@ -326,13 +324,12 @@ impl Config {
                     }
                     if !is_valid_profile_name(parent) {
                         return Err(ConfigError::Validation(format!(
-                            "invalid parent profile name '{parent}' in [inherit] for \
-                             '{current}': must not be empty, must not contain / or \\\\, \
-                             must not be . or .."
+                            "invalid parent profile name '{parent}' in [inherit] for '{current}': \
+                             must not be empty, must not contain / or \\\\, must not be . or .."
                         )));
                     }
                     current = parent.clone();
-                }
+                },
                 None => break,
             }
         }
@@ -372,10 +369,7 @@ fn load_profiles_toml() -> Result<ProfilesToml, ConfigError> {
         path: path.clone(),
         source,
     })?;
-    toml::from_str(&content).map_err(|source| ConfigError::Parse {
-        path,
-        source,
-    })
+    toml::from_str(&content).map_err(|source| ConfigError::Parse { path, source })
 }
 
 /// Return the XDG config directory (`$XDG_CONFIG_HOME` or `~/.config`).
@@ -424,8 +418,9 @@ fn home_path() -> Result<PathBuf, ConfigError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use celily_lib::NetworkRule;
+
+    use super::*;
 
     #[test]
     fn deserialize_quota_on_allow_rule() {

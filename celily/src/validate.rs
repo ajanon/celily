@@ -11,6 +11,7 @@ pub enum ForbiddenError {
     Subtree { label: &'static str },
 }
 use celily_lib::CommandExt;
+
 use crate::util::is_under_or_eq;
 
 /// A path that may not be bind-mounted into the container.
@@ -52,14 +53,16 @@ impl Forbidden {
     /// the violation.
     pub fn check(&self, canonical: &Path) -> Result<(), ForbiddenError> {
         match self {
-            Forbidden::Exact { canonical: blocked, label } if canonical == blocked => {
-                Err(ForbiddenError::Exact { label: *label })
-            }
-            Forbidden::Subtree { canonical: blocked, label }
-                if is_under_or_eq(canonical, blocked) =>
-            {
+            Forbidden::Exact {
+                canonical: blocked,
+                label,
+            } if canonical == blocked => Err(ForbiddenError::Exact { label: *label }),
+            Forbidden::Subtree {
+                canonical: blocked,
+                label,
+            } if is_under_or_eq(canonical, blocked) => {
                 Err(ForbiddenError::Subtree { label: *label })
-            }
+            },
             _ => Ok(()),
         }
     }

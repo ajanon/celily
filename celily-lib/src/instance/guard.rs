@@ -19,7 +19,11 @@ pub struct InstanceGuard<B: InstanceBackend> {
 
 impl<B: InstanceBackend> InstanceGuard<B> {
     pub fn new(name: String, backend: Arc<B>, keep: bool) -> Self {
-        Self { name, backend, keep }
+        Self {
+            name,
+            backend,
+            keep,
+        }
     }
 }
 

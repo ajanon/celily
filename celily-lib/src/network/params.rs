@@ -1,8 +1,7 @@
 use bon::Builder;
 
-use crate::backend::{CreateBridgeParams, TcpAllow};
-
 use super::rule::NetworkRule;
+use crate::backend::{CreateBridgeParams, TcpAllow};
 
 /// The fixed TCP port mitmdump listens on for HTTP proxying. Each
 /// instance gets its own bridge with a unique gateway IP, so there is
@@ -40,12 +39,10 @@ impl NetworkParams {
             .allow
             .iter()
             .filter_map(|r| match r {
-                NetworkRule::Tcp { host, ports } if !ports.is_empty() => {
-                    Some(TcpAllow {
-                        host: *host,
-                        ports: ports.clone(),
-                    })
-                }
+                NetworkRule::Tcp { host, ports } if !ports.is_empty() => Some(TcpAllow {
+                    host: *host,
+                    ports: ports.clone(),
+                }),
                 _ => None,
             })
             .collect();
@@ -106,9 +103,15 @@ mod tests {
         );
         let cbp = params.to_create_bridge_params(false);
         assert_eq!(cbp.allow_tcp.len(), 2);
-        assert_eq!(cbp.allow_tcp[0].host, "1.2.3.4".parse::<std::net::IpAddr>().unwrap());
+        assert_eq!(
+            cbp.allow_tcp[0].host,
+            "1.2.3.4".parse::<std::net::IpAddr>().unwrap()
+        );
         assert_eq!(cbp.allow_tcp[0].ports, vec![443, 8443]);
-        assert_eq!(cbp.allow_tcp[1].host, "5.6.7.8".parse::<std::net::IpAddr>().unwrap());
+        assert_eq!(
+            cbp.allow_tcp[1].host,
+            "5.6.7.8".parse::<std::net::IpAddr>().unwrap()
+        );
         assert_eq!(cbp.allow_tcp[1].ports, vec![22]);
     }
 

@@ -4,15 +4,22 @@ use std::thread;
 
 use tracing::warn;
 
+use super::{
+    Initialized,
+    Instance,
+    InstanceError,
+    InstanceGuard,
+    InstanceKind,
+    LaunchConfig,
+    Running,
+};
 use crate::backend::{Device, InstanceBackend, InstanceConfig, NetworkBackend};
 use crate::distro::DistroKind;
 use crate::limits::Limits;
 use crate::mount::Mount;
-use crate::network::params::NetworkParams;
 use crate::network::NetworkIsolation;
+use crate::network::params::NetworkParams;
 use crate::secrets::{SecretError, SecretProvider};
-
-use super::{Initialized, Instance, InstanceError, InstanceGuard, InstanceKind, LaunchConfig, Running};
 
 // ---------------------------------------------------------------------------
 // Prepared state
@@ -132,19 +139,15 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
         let (isolation, ca_cert) = thread::scope(|s| {
             let iso_handle = s.spawn({
                 let nb = Arc::clone(&self.network_backend);
-                let cbp = self.config.network.to_create_bridge_params(self.config.keep);
+                let cbp = self
+                    .config
+                    .network
+                    .to_create_bridge_params(self.config.keep);
                 let provider = self.secret_provider.as_deref();
                 let bridge = self.config.bridge_name.clone();
                 let allow = self.config.network.allow.clone();
                 let dns = self.config.network.dns;
-                move || NetworkIsolation::setup(
-                    nb.as_ref(),
-                    &bridge,
-                    &cbp,
-                    &allow,
-                    dns,
-                    provider,
-                )
+                move || NetworkIsolation::setup(nb.as_ref(), &bridge, &cbp, &allow, dns, provider)
             });
 
             // Add mount devices while the bridge is being created.

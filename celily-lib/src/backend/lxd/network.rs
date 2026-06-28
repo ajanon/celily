@@ -2,12 +2,11 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::thread;
 
-use crate::backend::{BridgeGuard, CreateBridgeParams, NetworkBackend};
-use crate::command::{CommandError, CommandExt};
-
 use super::LxcBackend;
 use super::acl::{self, NetworkAcl, NetworkAclRule, rule_to_cli_args};
 use super::bridge::LxdBridge;
+use crate::backend::{BridgeGuard, CreateBridgeParams, NetworkBackend};
+use crate::command::{CommandError, CommandExt};
 
 // ---------------------------------------------------------------------------
 // Internal primitives (used by guards and the trait impl)
@@ -15,7 +14,9 @@ use super::bridge::LxdBridge;
 
 impl LxcBackend {
     pub(crate) fn create_network(&self, name: &str) -> Result<(), CommandError> {
-        self.lxc_command().args(["network", "create", name, "--type", "bridge"]).run()
+        self.lxc_command()
+            .args(["network", "create", name, "--type", "bridge"])
+            .run()
     }
 
     pub(crate) fn delete_network(&self, name: &str) -> Result<(), CommandError> {
@@ -23,7 +24,8 @@ impl LxcBackend {
     }
 
     pub(crate) fn get_network_ipv4(&self, name: &str) -> Result<IpAddr, CommandError> {
-        let raw = self.lxc_command()
+        let raw = self
+            .lxc_command()
             .args(["network", "get", name, "ipv4.address"])
             .run_stdout()?;
         let ip_str = raw.split('/').next().unwrap_or(&raw);
@@ -35,7 +37,11 @@ impl LxcBackend {
         })
     }
 
-    pub(crate) fn set_network_dnsmasq(&self, name: &str, dnsmasq: &str) -> Result<(), CommandError> {
+    pub(crate) fn set_network_dnsmasq(
+        &self,
+        name: &str,
+        dnsmasq: &str,
+    ) -> Result<(), CommandError> {
         self.lxc_command()
             .args(["network", "set", name, &format!("raw.dnsmasq={dnsmasq}")])
             .run()
@@ -49,15 +55,26 @@ impl LxcBackend {
 
     pub(crate) fn set_network_egress_reject(&self, name: &str) -> Result<(), CommandError> {
         self.lxc_command()
-            .args(["network", "set", name, "security.acls.default.egress.action=reject"])
+            .args([
+                "network",
+                "set",
+                name,
+                "security.acls.default.egress.action=reject",
+            ])
             .run()
     }
 
     pub(crate) fn create_acl(&self, name: &str) -> Result<(), CommandError> {
-        self.lxc_command().args(["network", "acl", "create", name]).run()
+        self.lxc_command()
+            .args(["network", "acl", "create", name])
+            .run()
     }
 
-    pub(crate) fn add_acl_rule(&self, acl: &str, rule: &NetworkAclRule) -> Result<(), CommandError> {
+    pub(crate) fn add_acl_rule(
+        &self,
+        acl: &str,
+        rule: &NetworkAclRule,
+    ) -> Result<(), CommandError> {
         let cli_args = rule_to_cli_args(rule);
         let mut args = vec!["network", "acl", "rule", "add", acl];
         args.extend(cli_args.iter().map(|s| s.as_str()));
@@ -65,7 +82,9 @@ impl LxcBackend {
     }
 
     pub(crate) fn delete_acl(&self, name: &str) -> Result<(), CommandError> {
-        self.lxc_command().args(["network", "acl", "delete", name]).run()
+        self.lxc_command()
+            .args(["network", "acl", "delete", name])
+            .run()
     }
 }
 
@@ -94,13 +113,15 @@ impl BridgeGuard for LxdBridgeGuard {}
 /// to mitmproxy's DNS listener on the gateway. When `dns` is
 /// `false`, returns `None` (no DNS filtering).
 fn build_dnsmasq_config(dns: bool, gateway_ip: &str, dns_port: u16) -> Option<String> {
-    dns.then(|| format!(
-        "no-resolv
+    dns.then(|| {
+        format!(
+            "no-resolv
 no-poll
 cache-size=0
 server={gateway_ip}#{dns_port}
 "
-    ))
+        )
+    })
 }
 
 impl NetworkBackend for LxcBackend {

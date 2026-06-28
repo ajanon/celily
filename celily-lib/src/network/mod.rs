@@ -2,13 +2,12 @@ mod mitmproxy;
 pub mod params;
 pub mod rule;
 
-pub use params::NetworkParams;
-pub use rule::{AuthConfig, NetworkRule, QuotaConfig};
-pub use mitmproxy::MitmProxyError;
+use std::net::IpAddr;
 
 use mitmproxy::MitmProxy;
-
-use std::net::IpAddr;
+pub use mitmproxy::MitmProxyError;
+pub use params::NetworkParams;
+pub use rule::{AuthConfig, NetworkRule, QuotaConfig};
 
 use crate::backend::{BridgeGuard, CreateBridgeParams, NetworkBackend};
 use crate::secrets::{SecretError, SecretProvider};
@@ -53,13 +52,8 @@ impl NetworkIsolation {
             .create_bridge(bridge_name, params)
             .map_err(|e| NetworkError::Backend(Box::new(e)))?;
 
-        let (proxy, ca_cert) = MitmProxy::start(
-            bridge_name,
-            &gateway_ip.to_string(),
-            dns,
-            allow,
-            provider,
-        )?;
+        let (proxy, ca_cert) =
+            MitmProxy::start(bridge_name, &gateway_ip.to_string(), dns, allow, provider)?;
 
         Ok((
             Self {

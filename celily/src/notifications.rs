@@ -45,7 +45,8 @@ pub fn add_proxy<B: InstanceBackend>(
         host_uid,
         host_gid,
     };
-    backend.add_device(instance_name, "notifications", &device)
+    backend
+        .add_device(instance_name, "notifications", &device)
         .context("failed to add notification proxy device")?;
 
     info!("notification proxy device attached at {listen_path}");

@@ -4,10 +4,9 @@ use std::time::Duration;
 
 use tracing::info;
 
+use super::{Instance, InstanceError, InstanceGuard, Running};
 use crate::backend::{InstanceBackend, NetworkBackend};
 use crate::network::NetworkIsolation;
-
-use super::{Instance, InstanceError, InstanceGuard, Running};
 
 // ---------------------------------------------------------------------------
 // Initialized state
@@ -46,27 +45,41 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Initialized<IB>> 
                 .instance_backend
                 .exec_stdout(&self.config.name, &["systemctl", "is-system-running"])
             {
-                Ok(out) if out.trim() == "running" => { ready = true; break; }
+                Ok(out) if out.trim() == "running" => {
+                    ready = true;
+                    break;
+                },
                 _ => {},
             }
             sleep(Duration::from_millis(500));
         }
         if !ready {
-            return Err(InstanceError::Timeout { name: self.config.name.clone() });
+            return Err(InstanceError::Timeout {
+                name: self.config.name.clone(),
+            });
         }
 
         let container_cert_path = format!(
             "{}/mitmproxy-ca-cert.pem",
             self.config.distro.ca_cert_anchors_dir(),
         );
-        self.instance_backend.write_file(
-            &self.config.name, self.state.ca_cert.as_bytes(), &container_cert_path,
-            "0644", 0, 0,
-        ).map_err(|e| InstanceError::backend("failed to push CA cert", e))?;
+        self.instance_backend
+            .write_file(
+                &self.config.name,
+                self.state.ca_cert.as_bytes(),
+                &container_cert_path,
+                "0644",
+                0,
+                0,
+            )
+            .map_err(|e| InstanceError::backend("failed to push CA cert", e))?;
 
-        self.instance_backend.exec_stdout(
-            &self.config.name, &[self.config.distro.rebuild_trust_store_command()],
-        ).map_err(|e| InstanceError::backend("failed to rebuild trust store", e))?;
+        self.instance_backend
+            .exec_stdout(
+                &self.config.name,
+                &[self.config.distro.rebuild_trust_store_command()],
+            )
+            .map_err(|e| InstanceError::backend("failed to rebuild trust store", e))?;
 
         info!(instance = %self.config.name, "CA cert pushed, trust store rebuilt");
 
@@ -75,7 +88,9 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Initialized<IB>> 
             for mount in &self.config.mounts {
                 let mut current = mount.target.parent();
                 while let Some(parent) = current {
-                    if parent == self.config.container_home || !parent.starts_with(&self.config.container_home) {
+                    if parent == self.config.container_home
+                        || !parent.starts_with(&self.config.container_home)
+                    {
                         break;
                     }
                     if self.config.mounts.iter().any(|m| m.target == parent) {
@@ -86,11 +101,16 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Initialized<IB>> 
                 }
             }
             for parent in &parents {
-                let owner = format!("{}:{}", self.config.container_uid, self.config.container_gid);
-                self.instance_backend.exec_stdout(
-                    &self.config.name,
-                    &["chown", &owner, &parent.display().to_string()],
-                ).map_err(|e| InstanceError::backend("failed to chown mount parent", e))?;
+                let owner = format!(
+                    "{}:{}",
+                    self.config.container_uid, self.config.container_gid
+                );
+                self.instance_backend
+                    .exec_stdout(
+                        &self.config.name,
+                        &["chown", &owner, &parent.display().to_string()],
+                    )
+                    .map_err(|e| InstanceError::backend("failed to chown mount parent", e))?;
             }
         }
 

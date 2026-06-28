@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use serde::Deserialize;
-
 use celily_lib::{AuthConfig, NetworkRule, QuotaConfig};
+use serde::Deserialize;
 
 use super::ConfigError;
 
@@ -97,12 +96,9 @@ impl ConfigQuotaConfig {
     /// Validate and convert to a library [`QuotaConfig`].
     pub fn into_library(self) -> Result<QuotaConfig, ConfigError> {
         if self.max_requests == 0 {
-            return Err(ConfigError::Validation(
-                "max_requests must be > 0".into(),
-            ));
+            return Err(ConfigError::Validation("max_requests must be > 0".into()));
         }
-        let window = parse_window_duration(&self.window)
-            .map_err(ConfigError::Validation)?;
+        let window = parse_window_duration(&self.window).map_err(ConfigError::Validation)?;
         Ok(QuotaConfig {
             max_requests: self.max_requests,
             window,
