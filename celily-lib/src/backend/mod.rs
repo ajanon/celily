@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
+use crate::mount::AccessMode;
+
 pub mod lxd;
 pub mod mock;
 
@@ -16,7 +18,7 @@ pub enum Device {
     Disk {
         source: PathBuf,
         target: PathBuf,
-        readonly: bool,
+        access: AccessMode,
     },
     /// Unix socket proxy (e.g. for desktop notifications).
     Proxy {

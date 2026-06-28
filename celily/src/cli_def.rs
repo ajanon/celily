@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use clap_complete::Shell;
-use celily_lib::Mount;
+use celily_lib::{AccessMode, Mount};
 
 #[derive(Parser)]
 #[command(about = "Launch an ephemeral LXD container for running commands")]
@@ -24,8 +24,8 @@ pub struct Args {
     #[arg(long)]
     pub vm: bool,
 
-    /// Mount a host directory into the container: SOURCE:TARGET[:readwrite]
-    #[arg(long = "mount", value_name = "SOURCE:TARGET[:readwrite]", value_parser = parse_cli_mount)]
+    /// Mount a host directory into the container: SOURCE:TARGET[:readwrite|readonly]
+    #[arg(long = "mount", value_name = "SOURCE:TARGET[:readwrite|readonly]", value_parser = parse_cli_mount)]
     pub cli_mounts: Vec<Mount>,
 
     /// CPU limit [default from limits.cpu, then 2]
@@ -135,20 +135,19 @@ pub fn generate_completions(shell: Shell, out: &mut dyn io::Write) {
     clap_complete::generate(shell, &mut cmd, &name, out);
 }
 
-/// Parse a `--mount` argument of the form `SOURCE:TARGET[:readwrite]`.
+/// Parse a `--mount` argument of the form `SOURCE:TARGET[:readwrite|readonly]`.
 pub fn parse_cli_mount(s: &str) -> Result<Mount, String> {
     let parts: Vec<&str> = s.splitn(3, ':').collect();
     if parts.len() < 2 {
-        return Err(format!("expected 'source:target[:readwrite]', got '{s}'"));
+        return Err(format!("expected 'source:target[:readwrite|readonly]', got '{s}'"));
     }
-    if let Some(&flag) = parts.get(2)
-        && flag != "readwrite"
-    {
-        return Err(format!("unknown mount flag '{flag}', expected 'readwrite'"));
-    }
+    let access = match parts.get(2) {
+        None => AccessMode::ReadOnly,
+        Some(&flag) => flag.parse().map_err(|e| format!("invalid mount flag: {e}"))?,
+    };
     Ok(Mount {
         source: PathBuf::from(parts[0]),
         target: PathBuf::from(parts[1]),
-        readwrite: parts.get(2).is_some(),
+        access,
     })
 }

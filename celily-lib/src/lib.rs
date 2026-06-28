@@ -23,7 +23,7 @@ pub use instance::{
     SystemState,
 };
 pub use limits::Limits;
-pub use mount::Mount;
+pub use mount::{AccessMode, Mount};
 pub use network::{
     AuthConfig,
     MitmProxyError,

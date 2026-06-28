@@ -8,6 +8,8 @@ pub mod worktree;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
+use celily_lib::AccessMode;
 use celily_lib::{DistroKind, InstanceKind, Mount};
 use merge::Merge;
 use serde::Deserialize;
@@ -512,19 +514,20 @@ quota = { max_requests = 100, window = "1x" }
         default.mounts = vec![Mount {
             source: "/src-a".into(),
             target: "/tgt-a".into(),
-            readwrite: false,
+            access: AccessMode::ReadOnly,
         }];
         let mut profile = Config::default();
         profile.mounts = vec![Mount {
             source: "/src-b".into(),
             target: "/tgt-b".into(),
-            readwrite: true,
+            access: AccessMode::ReadWrite,
         }];
 
         default.merge(profile);
         assert_eq!(default.mounts.len(), 2);
         assert_eq!(default.mounts[0].source, PathBuf::from("/src-a"));
         assert_eq!(default.mounts[1].source, PathBuf::from("/src-b"));
+        assert_eq!(default.mounts[1].access, AccessMode::ReadWrite);
     }
 
     /// HashMap fields: extended, profile keys win on conflict.
