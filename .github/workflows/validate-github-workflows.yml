@@ -1,7 +1,6 @@
 name: Validate GitHub Workflows
 
-permissions:
-  contents: read
+permissions: {}
 
 on:
   workflow_call:
@@ -11,12 +10,16 @@ jobs:
   validate:
     name: Validate
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write # Necessary for zizmor
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
       - uses: docker://rhysd/actionlint:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 # 1.7.12
-      - uses: docker://ghcr.io/zizmorcore/zizmor:d1117e5dbd9ee4970644067b534ab6ab50371f3c6f7f4d05446eb603a6e78f48 # 1.26.1
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa # v0.5.7
         with:
-          args: --persona=pedantic .
+          persona: pedantic
+          version: 1.26.1

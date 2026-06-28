@@ -105,4 +105,6 @@ jobs:
     name: Validate workflows
     needs: changes
     if: needs.changes.outputs.workflows == 'true'
+    permissions:
+      security-events: write # Necessary for zizmor
     uses: ./.github/workflows/validate-github-workflows.yml
