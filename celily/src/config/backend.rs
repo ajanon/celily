@@ -10,7 +10,7 @@ pub enum BackendKind {
 }
 
 /// Backend selection configuration.
-#[derive(Debug, Deserialize, Merge)]
+#[derive(Debug, Default, Deserialize, Merge)]
 #[merge(strategy = super::merge_strategy::overwrite_some)]
 pub struct BackendConfig {
     /// Which backend to use. Currently `lxd` and `incus` are supported.
@@ -25,14 +25,4 @@ pub struct BackendConfig {
     /// and VMs. When `None`, falls back to `"default"` at runtime.
     #[serde(default)]
     pub pool: Option<String>,
-}
-
-impl Default for BackendConfig {
-    fn default() -> Self {
-        Self {
-            kind: None,
-            project: None,
-            pool: None,
-        }
-    }
 }
