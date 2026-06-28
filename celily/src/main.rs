@@ -18,8 +18,8 @@ use tracing::level_filters::LevelFilter;
 
 use crate::cli::Args;
 use crate::config::BackendKind;
-use crate::context::{build_worktree_init_script, resolve_context, resolve_git_identity};
-use crate::util::{bridge_name, shell_escape};
+use crate::context::{resolve_context, resolve_git_identity};
+use crate::util::bridge_name;
 
 /// Top-level application logic: load config, resolve context, build
 /// the isolated environment via the library, then run the command.
@@ -203,16 +203,31 @@ fn run() -> anyhow::Result<i32> {
         env_map.insert("GIT_COMMITTER_EMAIL".into(), git_email);
 
         let auto_commit = cfg.worktree.auto_commit.unwrap_or(true) && !args.no_auto_commit;
-        let project_path = shell_escape(&ctx.project_dir.to_string_lossy());
-        let init_script = build_worktree_init_script(
-            &branch_name,
-            auto_commit,
-            &ctx.name,
-            &worktree_name,
-            &project_path,
+
+        // Pass worktree parameters via environment variables.
+        // The script reads these instead of interpolating them into
+        // shell source, avoiding injection surface and making the
+        // script independently lintable with shellcheck/shfmt.
+        env_map.insert("CELILY_WORKTREE_BRANCH".into(), branch_name.clone());
+        env_map.insert("CELILY_WORKTREE_NAME".into(), worktree_name.clone());
+        env_map.insert(
+            "CELILY_WORKTREE_PROJECT".into(),
+            ctx.project_dir.to_string_lossy().into_owned(),
+        );
+        env_map.insert("CELILY_WORKTREE_INSTANCE".into(), ctx.name.clone());
+        env_map.insert(
+            "CELILY_WORKTREE_AUTO_COMMIT".into(),
+            if auto_commit { "1".into() } else { "0".into() },
         );
 
-        let mut full_cmd: Vec<String> = vec!["sh".into(), "-c".into(), init_script, "--".into()];
+        let init_script = include_str!("../share/worktree-init.sh");
+
+        let mut full_cmd: Vec<String> = vec![
+            "sh".into(),
+            "-c".into(),
+            init_script.to_string(),
+            "--".into(),
+        ];
         full_cmd.extend(raw_command);
 
         running.exec(&full_cmd, &env_map, Some(&ctx.project_dir))?
