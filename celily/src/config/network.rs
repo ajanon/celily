@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use celily_lib::{AuthConfig, NetworkRule, QuotaConfig};
+use merge::Merge;
 use serde::Deserialize;
 
 use super::ConfigError;
@@ -10,11 +11,13 @@ use super::ConfigError;
 ///
 /// Holds raw deserialized types. Call [`ConfigNetworkRule::into_library`]
 /// to validate and convert to the library's [`NetworkRule`].
-#[derive(Debug, Default, Clone, Deserialize)]
+#[derive(Debug, Default, Clone, Deserialize, Merge)]
 #[serde(default)]
+#[merge(strategy = super::merge_strategy::overwrite_some)]
 pub struct NetworkConfig {
     /// Allowed hosts/paths. Default-deny: anything not matched is
     /// blocked with HTTP 403.
+    #[merge(strategy = ::merge::vec::append)]
     pub allow: Vec<ConfigNetworkRule>,
 
     /// Enable DNS filtering via the mitmproxy DNS listener.
@@ -132,21 +135,6 @@ fn parse_window_duration(s: &str) -> Result<Duration, String> {
         },
     };
     Ok(Duration::from_secs(num * multiplier))
-}
-
-impl NetworkConfig {
-    /// Merge two `NetworkConfig` values. `allow` is
-    /// list-concatenation (default first, profile appended).
-    pub(super) fn merge(default: Self, profile: Self) -> Self {
-        Self {
-            allow: {
-                let mut a = default.allow;
-                a.extend(profile.allow);
-                a
-            },
-            dns: profile.dns.or(default.dns),
-        }
-    }
 }
 
 #[cfg(test)]

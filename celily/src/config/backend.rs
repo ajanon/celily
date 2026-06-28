@@ -1,3 +1,4 @@
+use merge::Merge;
 use serde::Deserialize;
 
 /// Which backend to use for managing instances.
@@ -9,7 +10,8 @@ pub enum BackendKind {
 }
 
 /// Backend selection configuration.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Merge)]
+#[merge(strategy = super::merge_strategy::overwrite_some)]
 pub struct BackendConfig {
     /// Which backend to use. Currently `lxd` and `incus` are supported.
     #[serde(default)]
@@ -31,17 +33,6 @@ impl Default for BackendConfig {
             kind: None,
             project: None,
             pool: None,
-        }
-    }
-}
-
-impl BackendConfig {
-    /// Merge a profile config over the default.
-    pub fn merge(default: &Self, profile: &Self) -> Self {
-        Self {
-            kind: profile.kind.clone().or(default.kind.clone()),
-            project: profile.project.clone().or(default.project.clone()),
-            pool: profile.pool.clone().or(default.pool.clone()),
         }
     }
 }
