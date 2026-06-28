@@ -31,9 +31,8 @@ The project uses `#![feature(once_cell_try)]` for `OnceCell::get_or_try_init`.
 cargo check          # fast type/borrow check, no codegen
 cargo build          # debug build
 cargo build --release
+cargo test           # run unit tests
 ```
-
-There are no tests yet.
 
 ## Exploring the codebase
 
