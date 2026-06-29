@@ -529,9 +529,11 @@ resets when the bucket rolls over.
 	Maximum number of HTTP requests allowed in the time window. Must be > 0.
 
 *window* = _string_ (required)
-	Time window duration. Supported suffixes: *s* (seconds), *m*
-	(minutes), *h* (hours), *d* (days). Examples: *1h*,
-	*30m*, *86400s*, *1d*.
+	Time window duration. Accepts compact forms like *1h*, *30m*, *86400s*, *7d*
+	as well as long forms (*1hour 30min*), combined units (*2h 15m*), and
+	fractional values (*1.5h*). Suffixes: *ns*, *us/µs*, *ms*, *s/sec*, *m/min*,
+	*h/hr*, *d/day*, *w/week*, *M/month*, *y/year* (and their plural/long
+	variants). See https://github.com/chronotope/humantime for the entire rules.
 
 Example:
 ```

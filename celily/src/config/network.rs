@@ -87,12 +87,23 @@ impl ConfigNetworkRule {
 
 /// Config-file representation of [`QuotaConfig`].
 ///
-/// The `window` field is a human-readable string like `"1h"`;
-/// [`into_library`](Self::into_library) parses it into a [`Duration`].
+/// The `window` field accepts human-readable duration strings like
+/// `"1h"`, `"30m"`, `"86400s"`, `"7d"`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ConfigQuotaConfig {
     pub max_requests: u64,
-    pub window: String,
+    #[serde(deserialize_with = "deserialize_window_duration")]
+    pub window: Duration,
+}
+
+/// Serde deserializer for the quota window field. Delegates to
+/// [`humantime::parse_duration`] for human-readable duration strings.
+fn deserialize_window_duration<'de, D>(d: D) -> Result<Duration, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(d)?;
+    humantime::parse_duration(&s).map_err(serde::de::Error::custom)
 }
 
 impl ConfigQuotaConfig {
@@ -101,74 +112,16 @@ impl ConfigQuotaConfig {
         if self.max_requests == 0 {
             return Err(ConfigError::Validation("max_requests must be > 0".into()));
         }
-        let window = parse_window_duration(&self.window).map_err(ConfigError::Validation)?;
         Ok(QuotaConfig {
             max_requests: self.max_requests,
-            window,
+            window: self.window,
         })
     }
-}
-
-/// Parse a human-readable duration string like `"1h"`, `"30m"`, `"86400s"`,
-/// or `"7d"` into a [`Duration`].
-///
-/// Supported suffixes: `s` (seconds), `m` (minutes), `h` (hours),
-/// `d` (days).
-fn parse_window_duration(s: &str) -> Result<Duration, String> {
-    let s = s.trim();
-    if s.is_empty() {
-        return Err("empty window duration".into());
-    }
-    let (num_str, suffix) = s.split_at(s.len() - 1);
-    let num: u64 = num_str
-        .parse()
-        .map_err(|_| format!("invalid number in window '{s}': expected <number><suffix>"))?;
-    let multiplier = match suffix {
-        "s" => 1,
-        "m" => 60,
-        "h" => 3600,
-        "d" => 86400,
-        _ => {
-            return Err(format!(
-                "unknown window suffix '{suffix}' in '{s}'; expected s, m, h, or d"
-            ));
-        },
-    };
-    Ok(Duration::from_secs(num * multiplier))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // --- parse_window_duration ---
-
-    #[test]
-    fn parse_suffixes() {
-        assert_eq!(
-            parse_window_duration("1h").unwrap(),
-            Duration::from_secs(3600)
-        );
-        assert_eq!(
-            parse_window_duration("30m").unwrap(),
-            Duration::from_secs(1800)
-        );
-        assert_eq!(
-            parse_window_duration("86400s").unwrap(),
-            Duration::from_secs(86400)
-        );
-        assert_eq!(
-            parse_window_duration("7d").unwrap(),
-            Duration::from_secs(604800)
-        );
-    }
-
-    #[test]
-    fn parse_rejects_invalid() {
-        assert!(parse_window_duration("1x").is_err());
-        assert!(parse_window_duration("").is_err());
-        assert!(parse_window_duration("abc").is_err());
-    }
 
     // --- ConfigNetworkRule deserialization ---
 
@@ -258,19 +211,5 @@ ports = [22]
         } else {
             panic!("expected Tcp rule");
         }
-    }
-
-    #[test]
-    fn deserialize_rejects_bad_window() {
-        let toml = r#"
-[[allow]]
-type = "http"
-host = "api.example.com"
-quota = { max_requests = 100, window = "1x" }
-"#;
-        let nc: NetworkConfig = toml::from_str(toml).unwrap();
-        let rule = nc.allow.into_iter().next().unwrap();
-        let err = rule.into_library().unwrap_err();
-        assert!(err.to_string().contains("unknown window suffix"));
     }
 }

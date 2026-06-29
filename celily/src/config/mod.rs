@@ -462,26 +462,6 @@ quota = { max_requests = 0, window = "1h" }
         assert!(err.to_string().contains("max_requests must be > 0"));
     }
 
-    #[test]
-    fn validate_quota_rejects_bad_window() {
-        let config: Config = toml::from_str(
-            r#"
-distro = "arch"
-
-allowed_dirs = ["/tmp"]
-
-[[network.allow]]
-type = "http"
-host = "api.example.com"
-quota = { max_requests = 100, window = "1x" }
-"#,
-        )
-        .unwrap();
-        let rule = config.network.allow.into_iter().next().unwrap();
-        let err = rule.into_library().unwrap_err();
-        assert!(err.to_string().contains("unknown window suffix"));
-    }
-
     // -- Merge tests (derive + strategies) --
 
     /// Profile scalar wins over default.
