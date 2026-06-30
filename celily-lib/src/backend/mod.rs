@@ -28,14 +28,19 @@ pub enum Device {
         target: PathBuf,
         access: AccessMode,
     },
-    /// Unix socket proxy (e.g. for desktop notifications).
+    /// Unix socket proxy
     Proxy {
-        socket_path: String,
-        listen_path: String,
+        /// LXD/Incus proxy connect string (e.g. `unix:/run/user/1000/sock`).
+        connect: String,
+        /// LXD/Incus proxy listen string (e.g. `unix:/run/sock`).
+        listen: String,
         uid: u32,
         gid: u32,
         host_uid: u32,
         host_gid: u32,
+        bind: ProxyBind,
+        /// File mode for the socket inside the instance (e.g. `"0600"`).
+        mode: String,
     },
 }
 

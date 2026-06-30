@@ -173,6 +173,14 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
                     .map_err(|e| InstanceError::backend("failed to add disk device", e))?;
             }
 
+            // Add pre-built devices (proxy, etc.) from the caller.
+            for (i, device) in self.config.extra_devices.iter().enumerate() {
+                let dev_name = format!("extra{i}");
+                self.instance_backend
+                    .add_device(&self.config.name, &dev_name, device)
+                    .map_err(|e| InstanceError::backend("failed to add extra device", e))?;
+            }
+
             // Set description if non-empty.
             if !self.config.description.is_empty() {
                 self.instance_backend
