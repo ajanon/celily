@@ -13,7 +13,7 @@ pub use running::Running;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::backend::{InstanceBackend, NetworkBackend};
+use crate::backend::{Device, InstanceBackend, NetworkBackend};
 use crate::distro::DistroKind;
 use crate::limits::Limits;
 use crate::mount::Mount;
@@ -109,6 +109,7 @@ pub(crate) struct LaunchConfig {
     pub(crate) kind: InstanceKind,
     pub(crate) distro: DistroKind,
     pub(crate) mounts: Vec<Mount>,
+    pub(crate) extra_devices: Vec<Device>,
     pub(crate) container_uid: u32,
     pub(crate) container_gid: u32,
     pub(crate) exec_uid: u32,
