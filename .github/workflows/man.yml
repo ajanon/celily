@@ -4,11 +4,21 @@ permissions:
   contents: read
 
 on:
-  workflow_call:
+  pull_request:
+    paths:
+      - 'man/**'
+      - 'Makefile'
+      - '.github/workflows/man.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'man/**'
+      - 'Makefile'
+      - '.github/workflows/man.yml'
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-man-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

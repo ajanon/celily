@@ -4,11 +4,19 @@ permissions:
   contents: read
 
 on:
-  workflow_call:
+  pull_request:
+    paths:
+      - '**/*.py'
+      - '.github/workflows/python.yml'
+  push:
+    branches: [main]
+    paths:
+      - '**/*.py'
+      - '.github/workflows/python.yml'
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-python-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
