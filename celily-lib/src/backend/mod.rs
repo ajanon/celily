@@ -11,6 +11,14 @@ pub mod mock;
 // Shared types
 // ---------------------------------------------------------------------------
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, strum::Display)]
+#[strum(serialize_all = "lowercase")]
+pub enum ProxyBind {
+    #[default]
+    Instance,
+    Host,
+}
+
 /// A device to attach to an instance.
 #[derive(Debug, Clone)]
 pub enum Device {
