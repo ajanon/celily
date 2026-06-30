@@ -10,6 +10,7 @@ pub use guard::InstanceGuard;
 pub use initialized::Initialized;
 pub use prepared::Prepared;
 pub use running::Running;
+#[cfg(feature = "serde")]
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -62,6 +63,7 @@ pub enum InstanceKind {
     Vm,
 }
 
+#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for InstanceKind {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
