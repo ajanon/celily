@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use celily_lib::backend::lxd::LxcBackend;
-use celily_lib::{Instance, Limits, NetworkParams, Providers, SecretProvider};
+use celily_lib::{Instance, Limits, NetworkParams, SecretProvider};
 use clap::Parser;
 use tracing::info;
 use tracing::level_filters::LevelFilter;
@@ -69,11 +69,7 @@ fn run() -> anyhow::Result<i32> {
 
     // Resolve and verify the secret provider.
     let secret_provider: Option<Box<dyn SecretProvider<Error = celily_lib::SecretError>>> =
-        if let Some(ref name) = cfg.secret_provider {
-            let provider = match name.as_str() {
-                "rbw" => Providers::Rbw,
-                other => anyhow::bail!("unknown secret provider: {other}"),
-            };
+        if let Some(provider) = cfg.secret_provider {
             let provider = provider.resolve();
             provider.check_available()?;
             Some(provider)

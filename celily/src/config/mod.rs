@@ -97,7 +97,7 @@ pub struct Config {
     /// in `celily-config`(5). When absent, secrets are not resolved;
     /// attempting to use `auth.secret` in a network allow rule without a
     /// configured provider is an error.
-    pub secret_provider: Option<String>,
+    pub secret_provider: Option<celily_lib::Providers>,
     /// Network isolation configuration. When enabled, the instance gets a
     /// dedicated bridge with an egress ACL and a per-instance mitmproxy.
     #[merge(strategy = Merge::merge)]
