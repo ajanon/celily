@@ -124,14 +124,6 @@ example above the merge order is:
 
 # TOP-LEVEL KEYS
 
-All settings in _config.toml_ and profile files are top-level keys.
-There are no _[common]_ or _[run]_ tables -- all fields
-that were previously nested are now set directly (e.g. _distro = "arch"_,
-_project_target = "~/src"_). Nested tables (_[limits]_, _[network]_,
-_[worktree]_, _[env]_) and arrays of tables (_[[mounts]]_,
-_[[proxy]]_, _[[network.allow]]_) remain as before but without the
-_[run]_ prefix.
-
 *distro* = _string_
 	*Required.* Distribution the image is based on. Supported distros:
 	- *arch* (Arch Linux)
