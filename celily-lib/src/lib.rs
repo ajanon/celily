@@ -10,7 +10,15 @@ pub mod network;
 pub mod secrets;
 pub mod util;
 
-pub use backend::{BridgeGuard, CreateBridgeParams, InstanceBackend, NetworkBackend, TcpAllow};
+pub use backend::{
+    BridgeGuard,
+    CreateBridgeParams,
+    Device,
+    InstanceBackend,
+    NetworkBackend,
+    ProxyBind,
+    TcpAllow,
+};
 pub use command::{ChildExt, CommandError, CommandExt, ShutdownStatus};
 pub use distro::DistroKind;
 pub use instance::{
