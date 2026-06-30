@@ -546,12 +546,12 @@ quota = { max_requests = 0, window = "1h" }
     #[test]
     fn option_bool_false_wins() {
         let mut default = Config::default();
-        default.notifications = Some(true);
+        default.network.dns = Some(true);
         let mut profile = Config::default();
-        profile.notifications = Some(false);
+        profile.network.dns = Some(false);
 
         default.merge(profile);
-        assert_eq!(default.notifications, Some(false));
+        assert_eq!(default.network.dns, Some(false));
     }
 
     /// Nested BackendConfig: profile fields inside it win.
