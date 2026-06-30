@@ -141,6 +141,102 @@ pub fn validate_mount_source(
     Ok(canonical)
 }
 
+/// Validate a proxy device's connect path against the proxy-specific
+/// forbidden list and boundary rules.
+///
+/// The `connect` string must be in LXD/Incus format (e.g.
+/// `unix:/run/user/1000/dbus-notifications.sock`). Only `unix:` sockets
+/// are supported (no abstract sockets either).
+///
+/// Security rules (enforced in order):
+///
+/// 1. The connect string must start with `unix:`.
+/// 2. The extracted path must canonicalize successfully.
+/// 3. The canonical path must pass every entry in the proxy-forbidden list
+/// 4. The canonical path must be under `$HOME` or the user's `$XDG_RUNTIME_DIR`
+///    (defaulting to `/run/user/<uid>`).
+pub fn validate_proxy_connect(connect: &str, home: &Path, uid: u32) -> Result<()> {
+    let path_str = connect
+        .strip_prefix("unix:")
+        .context("proxy connect must start with `unix:` (only Unix sockets are supported)")?;
+
+    let path = Path::new(path_str);
+    let canonical = path
+        .canonicalize()
+        .with_context(|| format!("cannot resolve proxy socket {path_str}"))?;
+
+    let runtime_dir_raw = PathBuf::from(
+        std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| format!("/run/user/{uid}")),
+    );
+    let runtime_dir = runtime_dir_raw.canonicalize().unwrap_or(runtime_dir_raw);
+
+    let forbidden = build_proxy_forbidden_list(home, &runtime_dir);
+    for entry in &forbidden {
+        entry
+            .check(&canonical)
+            .with_context(|| format!("cannot proxy socket {path_str}"))?;
+    }
+
+    if !is_under_or_eq(&canonical, home) && !is_under_or_eq(&canonical, &runtime_dir) {
+        bail!(
+            "proxy socket {path_str} is not under {} or {}",
+            home.display(),
+            runtime_dir.display(),
+        );
+    }
+
+    Ok(())
+}
+
+/// Build the forbidden-path list for proxy devices.
+///
+/// Directories and sockets that are always too sensitive to expose
+fn build_proxy_forbidden_list(home: &Path, runtime_dir: &Path) -> Vec<Forbidden> {
+    let mut list = Vec::new();
+
+    // SSH agent sockets (in home directory).
+    list.extend(Forbidden::under(home, ".ssh/agent", "~/.ssh/agent"));
+
+    // Secrets/credential brokers under $XDG_RUNTIME_DIR.
+    list.extend(Forbidden::under(
+        runtime_dir,
+        "gnupg",
+        "$XDG_RUNTIME_DIR/gnupg",
+    ));
+    list.extend(Forbidden::under(
+        runtime_dir,
+        "keyring",
+        "$XDG_RUNTIME_DIR/keyring",
+    ));
+    list.extend(Forbidden::under(runtime_dir, "rbw", "$XDG_RUNTIME_DIR/rbw"));
+    list.extend(Forbidden::under(runtime_dir, "gcr", "$XDG_RUNTIME_DIR/gcr"));
+    list.extend(Forbidden::under(
+        runtime_dir,
+        "p11-kit",
+        "$XDG_RUNTIME_DIR/p11-kit",
+    ));
+
+    // Session-control and container control
+    list.extend(Forbidden::under(
+        runtime_dir,
+        "systemd",
+        "$XDG_RUNTIME_DIR/systemd",
+    ));
+    list.extend(Forbidden::under(
+        runtime_dir,
+        "podman",
+        "$XDG_RUNTIME_DIR/podman",
+    ));
+
+    // D-Bus session bus
+    let bus_path = runtime_dir.join("bus");
+    if let Ok(canon) = bus_path.canonicalize() {
+        list.push(Forbidden::exact(canon, "$XDG_RUNTIME_DIR/bus"));
+    }
+
+    list
+}
+
 /// Validate that the project directory can support worktree mode.
 ///
 /// Checks (in order):
