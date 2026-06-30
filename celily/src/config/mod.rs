@@ -2,6 +2,7 @@ pub mod backend;
 pub mod limits;
 pub mod merge_strategy;
 pub mod network;
+pub mod proxy;
 pub mod validation;
 pub mod worktree;
 
@@ -20,6 +21,7 @@ pub use self::limits::Limits;
 pub use self::network::NetworkConfig;
 use self::validation::{validate_config_dirs, validate_node_permissions};
 pub use self::worktree::WorktreeConfig;
+use crate::config::proxy::ProxyDevice;
 use crate::util::{expand_host_tilde, is_under_or_eq};
 
 #[derive(Debug, thiserror::Error)]
@@ -134,6 +136,10 @@ pub struct Config {
     /// the host's session bus. Set to false to disable. Ignored on VMs.
     #[serde(default = "default_notifications")]
     pub notifications: Option<bool>,
+    /// Proxy devices that expose host Unix sockets inside the instance.
+    /// Each entry corresponds to an LXD/Incus proxy device.
+    #[merge(strategy = ::merge::vec::append)]
+    pub proxy: Vec<ProxyDevice>,
 }
 
 /// Parsed representation of `profiles.toml`.
