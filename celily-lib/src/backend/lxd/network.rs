@@ -132,8 +132,6 @@ impl NetworkBackend for LxcBackend {
         name: &str,
         params: &CreateBridgeParams,
     ) -> Result<(Box<dyn BridgeGuard>, IpAddr), Self::Error> {
-        self.ensure_project()?;
-
         let lxd = Arc::new(self.clone());
 
         // RAII guard in place immediately -- any failure from here on
