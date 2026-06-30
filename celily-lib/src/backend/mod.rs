@@ -12,6 +12,8 @@ pub mod mock;
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, strum::Display)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
 #[strum(serialize_all = "lowercase")]
 pub enum ProxyBind {
     #[default]

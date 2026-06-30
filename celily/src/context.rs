@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
-use celily_lib::{AccessMode, CommandExt, Device, InstanceKind, Mount, NetworkRule, ProxyBind};
+use celily_lib::{AccessMode, CommandExt, Device, InstanceKind, Mount, NetworkRule};
 
 use crate::cli::Args;
 use crate::config::{Config, WorktreeConfig};
@@ -288,13 +288,6 @@ pub fn resolve_context(
     let mut extra_devices: Vec<Device> = Vec::new();
     for proxy in &cfg.proxy {
         validate_proxy_connect(&proxy.connect, home_canon, host_uid)?;
-        let bind: ProxyBind = match proxy.bind.as_str() {
-            "instance" => ProxyBind::Instance,
-            "host" => ProxyBind::Host,
-            other => {
-                bail!("invalid proxy bind value '{other}': expected 'container' or 'instance'")
-            },
-        };
         extra_devices.push(Device::Proxy {
             connect: proxy.connect.clone(),
             listen: proxy.listen.clone(),
@@ -302,7 +295,7 @@ pub fn resolve_context(
             gid: container_gid,
             host_uid,
             host_gid,
-            bind,
+            bind: proxy.bind,
             mode: proxy.mode.clone(),
         });
     }
