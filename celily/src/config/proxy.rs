@@ -1,3 +1,4 @@
+use celily_lib::ProxyBind;
 use serde::Deserialize;
 
 /// Configuration for a Unix socket proxy device.
@@ -13,14 +14,14 @@ pub struct ProxyDevice {
     pub listen: String,
     /// Which side the proxy listens on: `"instance"` (default) or `"host"`.
     #[serde(default = "default_bind")]
-    pub bind: String,
+    pub bind: ProxyBind,
     /// File mode for the socket inside the instance (e.g. `"0600"`).
     #[serde(default = "default_mode")]
     pub mode: String,
 }
 
-fn default_bind() -> String {
-    "instance".to_string()
+fn default_bind() -> ProxyBind {
+    ProxyBind::Instance
 }
 
 fn default_mode() -> String {
