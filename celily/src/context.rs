@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
-use celily_lib::{AccessMode, CommandExt, InstanceKind, Mount, NetworkRule};
+use celily_lib::{AccessMode, CommandExt, Device, InstanceKind, Mount, NetworkRule, ProxyBind};
 
 use crate::cli::Args;
 use crate::config::{Config, WorktreeConfig};
@@ -15,7 +15,7 @@ use crate::util::{
     is_under_or_eq,
     is_valid_username,
 };
-use crate::validate::{Forbidden, validate_mount_source};
+use crate::validate::{Forbidden, validate_mount_source, validate_proxy_connect};
 
 /// All configuration and runtime state resolved from CLI args, config files,
 /// and host environment before launching the LXD instance.
@@ -58,8 +58,8 @@ pub struct RunContext {
     /// Disable UEFI secure boot for VMs. Ignored on containers.
     /// Default: true (LXD default).
     pub secure_boot: bool,
-    /// Whether to bind-mount the notification proxy socket.
-    pub notifications: bool,
+    /// Pre-built extra devices (proxies, etc.) from config.
+    pub extra_devices: Vec<Device>,
 }
 
 /// Resolve CLI args, config, and host state into a [`RunContext`].
@@ -281,7 +281,31 @@ pub fn resolve_context(
     let network_dns = cfg.network.dns.unwrap_or(true);
     let security_nesting = cfg.security_nesting.unwrap_or(false);
     let secure_boot = cfg.secure_boot.unwrap_or(true);
-    let notifications = cfg.notifications.unwrap_or(true);
+
+    // Validate proxy devices and convert to backend Device::Proxy.
+    let host_uid = nix::unistd::Uid::current().as_raw();
+    let host_gid = nix::unistd::Gid::current().as_raw();
+    let mut extra_devices: Vec<Device> = Vec::new();
+    for proxy in &cfg.proxy {
+        validate_proxy_connect(&proxy.connect, home_canon, host_uid)?;
+        let bind: ProxyBind = match proxy.bind.as_str() {
+            "instance" => ProxyBind::Instance,
+            "host" => ProxyBind::Host,
+            other => {
+                bail!("invalid proxy bind value '{other}': expected 'container' or 'instance'")
+            },
+        };
+        extra_devices.push(Device::Proxy {
+            connect: proxy.connect.clone(),
+            listen: proxy.listen.clone(),
+            uid: container_uid,
+            gid: container_gid,
+            host_uid,
+            host_gid,
+            bind,
+            mode: proxy.mode.clone(),
+        });
+    }
 
     let effective_readonly = worktree_enabled
         || args.project_readonly
@@ -364,7 +388,7 @@ pub fn resolve_context(
         effective_readonly,
         security_nesting,
         secure_boot,
-        notifications,
+        extra_devices,
     })
 }
 

@@ -76,8 +76,8 @@ with the following rules:
 
 *Lists*
 	Lists from the default and profile are concatenated (default first,
-	profile appended). This applies to _mounts_, _network.allow_,
-	_allowed_dirs_, _allowed_files_, and _pass_env_.
+	profile appended). This applies to _mounts_, _proxy_,
+	_network.allow_, _allowed_dirs_, _allowed_files_, and _pass_env_.
 
 *Maps*
 	Maps from the default and profile are merged; profile entries with the
@@ -129,7 +129,8 @@ There are no _[common]_ or _[run]_ tables -- all fields
 that were previously nested are now set directly (e.g. _distro = "arch"_,
 _project_target = "~/src"_). Nested tables (_[limits]_, _[network]_,
 _[worktree]_, _[env]_) and arrays of tables (_[[mounts]]_,
-_[[network.allow]]_) remain as before but without the _[run]_ prefix.
+_[[proxy]]_, _[[network.allow]]_) remain as before but without the
+_[run]_ prefix.
 
 *distro* = _string_
 	*Required.* Distribution the image is based on. Supported distros:
@@ -271,22 +272,48 @@ curl -s --unix-socket /tmp/agent.sock http://localhost/refresh
 	an _auth.secret_ without a configured provider, *celily* exits
 	with an error.
 
-*notifications* = _bool_
-	Whether to bind-mount the notification proxy socket into the container.
-	When true (default), the host's
-	*xdg-dbus-proxy-notifications.service*(5) socket is exposed at
-	*/run/dbus-notifications.sock* inside the container, allowing tools
-	like *notify-send*(1) to send desktop notifications through the
-	host's session bus. The proxy filters inbound messages to only allow
-	*org.freedesktop.Notifications.Notify* and
-	*org.freedesktop.Notifications.GetServerInformation* calls.
-	Set to false to disable the bind-mount entirely.
-	Ignored on VMs.
+# [[proxy]] SECTION
 
-	*Warning:* The *Notify* call accepts an arbitrary _body_ string.
-	This allows software running inside the container to exfiltrate
-	arbitrary data through notification content. Only enable
-	notifications if you understand and accept this risk.
+Array of proxy devices that expose host Unix sockets inside the
+instance. Each entry maps to an LXD/Incus *proxy* device (see
+*lxc*(1) *device add proxy*).
+
+*Forbidden paths:* Certain paths are permanently blocked regardless
+of ownership: *~/.ssh/agent/*, and under *$XDG_RUNTIME_DIR*:
+*gnupg/*, *keyring/*, *rbw/*, *gcr/*, *p11-kit/*,
+*systemd/*, *podman/*, and *bus*. These directories and
+sockets grant access to secrets, session control, or container
+management and cannot be proxied.
+
+*Boundary:* The socket path must be under *$HOME* or
+*$XDG_RUNTIME_DIR* (falling back to */run/user/<uid>*).
+
+*connect* = _string_ (required)
+	Host-side socket path in LXD/Incus proxy format. Only *unix:*
+	sockets are supported (e.g. *unix:/run/user/1000/sock*, no
+	abstract sockets).
+
+*listen* = _string_ (required)
+	Container-side listen path in LXD/Incus proxy format (e.g.
+	*unix:/run/sock*).
+
+*bind* = _string_ (optional)
+	Which side the proxy listens on, *"instance"*, or *"host"*.
+	Default: *"instance"*.
+
+*mode* = _string_ (optional)
+	File mode for the socket inside the container (e.g. *"0644"*).
+	Default: *"0600"*.
+
+The proxy always runs as the current host user and owns the socket as the
+container user.
+
+Example (notifications via xdg-dbus-proxy):
+```
+[[proxy]]
+connect = "unix:/run/user/1000/dbus-notifications.sock"
+listen = "unix:/run/dbus-notifications.sock"
+```
 
 # [worktree] SECTION
 
@@ -416,19 +443,19 @@ per-instance LXD/Incus bridge with an egress ACL and a per-instance mitmproxy
 process that enforces the allowlist.
 
 - A dedicated bridge is created for the instance with an egress ACL
-  that blocks all TCP traffic except connections to the proxy.
-  DNS (UDP+TCP 53) is restricted to the bridge gateway by default
-  (_dns_ defaults to true). Set _dns = false_ to allow DNS to
-  any destination.
+	that blocks all TCP traffic except connections to the proxy.
+	DNS (UDP+TCP 53) is restricted to the bridge gateway by default
+	(_dns_ defaults to true). Set _dns = false_ to allow DNS to
+	any destination.
 - A per-instance mitmdump process runs on the host, bound to the
-  bridge gateway IP. It provides an HTTP forward proxy and a DNS
-  server. The container uses it as an explicit HTTP forward proxy
-  and as its primary DNS resolver.
+	bridge gateway IP. It provides an HTTP forward proxy and a DNS
+	server. The container uses it as an explicit HTTP forward proxy
+	and as its primary DNS resolver.
 - *HTTP_PROXY*, *HTTPS_PROXY*, and *NO_PROXY* environment
-  variables are forcibly injected into the container at the highest
-  priority -- they cannot be overridden by *--env* or config.
+	variables are forcibly injected into the container at the highest
+	priority -- they cannot be overridden by *--env* or config.
 - A per-instance CA certificate is pushed into the container so
-  TLS-terminated connections through the proxy are trusted.
+	TLS-terminated connections through the proxy are trusted.
 
 If the agent ignores the proxy environment variables and attempts
 a direct connection to the internet on port 80 or 443, the bridge

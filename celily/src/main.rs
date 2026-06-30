@@ -1,7 +1,6 @@
 mod cli;
 mod config;
 mod context;
-mod notifications;
 mod util;
 mod validate;
 
@@ -11,7 +10,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use celily_lib::backend::lxd::LxcBackend;
-use celily_lib::{Instance, InstanceKind, Limits, NetworkParams, Providers, SecretProvider};
+use celily_lib::{Instance, Limits, NetworkParams, Providers, SecretProvider};
 use clap::Parser;
 use tracing::info;
 use tracing::level_filters::LevelFilter;
@@ -139,21 +138,10 @@ fn run() -> anyhow::Result<i32> {
         .ephemeral(ctx.ephemeral)
         .keep(!ctx.ephemeral)
         .description(ctx.description.clone())
+        .extra_devices(ctx.extra_devices.clone())
         .build();
 
     let initialized = prepared.init()?;
-
-    // Wire notifications between init and start.
-    if ctx.notifications && ctx.kind == InstanceKind::Container {
-        if let Err(e) = notifications::add_proxy(
-            lxc.as_ref(),
-            initialized.name(),
-            ctx.container_uid,
-            ctx.container_gid,
-        ) {
-            tracing::warn!("notification proxy: {:#}", e);
-        }
-    }
 
     let running = initialized.start()?;
 

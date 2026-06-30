@@ -42,10 +42,6 @@ pub enum ConfigError {
     Validation(String),
 }
 
-fn default_notifications() -> Option<bool> {
-    Some(true)
-}
-
 #[derive(Debug, Default, Deserialize, Merge)]
 #[serde(default)]
 #[merge(strategy = merge_strategy::overwrite_some)]
@@ -128,14 +124,6 @@ pub struct Config {
     /// `CELILY_USER`, `CELILY_UID`, `CELILY_GID`, `CELILY_HOME`.
     /// Empty string or whitespace-only is treated as not set.
     pub pre_run: Option<String>,
-    /// Whether to bind-mount the notification proxy socket into the
-    /// container. When true (default), the host's
-    /// `xdg-dbus-proxy-notifications.service` socket is exposed at
-    /// `/run/dbus-notifications.sock` inside the container, allowing
-    /// tools like `notify-send` to send desktop notifications through
-    /// the host's session bus. Set to false to disable. Ignored on VMs.
-    #[serde(default = "default_notifications")]
-    pub notifications: Option<bool>,
     /// Proxy devices that expose host Unix sockets inside the instance.
     /// Each entry corresponds to an LXD/Incus proxy device.
     #[merge(strategy = ::merge::vec::append)]

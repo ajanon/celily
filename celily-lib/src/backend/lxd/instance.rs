@@ -108,12 +108,14 @@ impl crate::backend::InstanceBackend for LxcBackend {
                 self.lxc_project_command().args(&args).run()
             },
             Device::Proxy {
-                socket_path,
-                listen_path,
+                connect,
+                listen,
                 uid,
                 gid,
                 host_uid,
                 host_gid,
+                bind,
+                mode,
             } => self
                 .lxc_project_command()
                 .args([
@@ -123,10 +125,10 @@ impl crate::backend::InstanceBackend for LxcBackend {
                     name,
                     dev_name,
                     "proxy",
-                    "bind=container",
-                    &format!("connect=unix:{socket_path}"),
-                    &format!("listen=unix:{listen_path}"),
-                    "mode=0600",
+                    &format!("bind={bind}"),
+                    &format!("connect={connect}"),
+                    &format!("listen={listen}"),
+                    &format!("mode={mode}"),
                     &format!("uid={uid}"),
                     &format!("gid={gid}"),
                     &format!("security.uid={host_uid}"),
