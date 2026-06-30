@@ -26,6 +26,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: docker://ghcr.io/google/yamlfmt@sha256:015f4f1e818b38cb72bec2d4baa5d312d3a5f40c6c22ff3fef35a5415095b7f2 # 0.21.0
+      - name: yamlfmt
+        uses: docker://ghcr.io/google/yamlfmt@sha256:015f4f1e818b38cb72bec2d4baa5d312d3a5f40c6c22ff3fef35a5415095b7f2 # 0.21.0
         with:
           args: -lint -quiet .
