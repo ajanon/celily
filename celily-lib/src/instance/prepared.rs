@@ -156,7 +156,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
                     warn!(
                         instance = %self.config.name,
                         source = %mount.source.display(),
-                        "skipping file-based mount on VM (not supported by LXD)"
+                        "skipping file-based mount on VM (not supported by LXD/Incus)"
                     );
                     continue;
                 }
