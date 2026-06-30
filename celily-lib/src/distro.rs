@@ -1,8 +1,7 @@
-use serde::Deserialize;
-
 /// Which Linux distribution the image is based on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
 pub enum DistroKind {
     /// Arch Linux.
     #[default]

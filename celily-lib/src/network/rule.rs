@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use serde::Deserialize;
-
 /// A request quota tied to an HTTP allow rule.
 ///
 /// When present on an allow rule, requests matching that rule are
@@ -21,7 +19,8 @@ pub struct QuotaConfig {
 ///
 /// Secrets are resolved from `rbw` at startup and routed to mitmdump
 /// only - they never appear as environment variables in the container.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub struct AuthConfig {
     /// Name of an `rbw` item to resolve.
     pub secret: String,
@@ -31,7 +30,7 @@ pub struct AuthConfig {
 
     /// Optional prefix prepended to the resolved secret value.
     /// For `Authorization: Bearer <key>`, set `prefix = "Bearer "`.
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub prefix: Option<String>,
 }
 

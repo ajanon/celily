@@ -16,7 +16,7 @@ pedantic = "warn"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
-celily-lib = { path = "../celily-lib" }
+celily-lib = { path = "../celily-lib", features = ["serde"] }
 humantime = "2"
 merge = "0.2"
 nix = { version = "0.31", features = ["user"] }
