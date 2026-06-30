@@ -4,11 +4,19 @@ permissions:
   contents: read
 
 on:
-  workflow_call:
+  pull_request:
+    paths:
+      - '**/*.sh'
+      - '.github/workflows/bash.yml'
+  push:
+    branches: [main]
+    paths:
+      - '**/*.sh'
+      - '.github/workflows/bash.yml'
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-bash-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
