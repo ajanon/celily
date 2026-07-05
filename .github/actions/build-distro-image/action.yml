@@ -1,0 +1,60 @@
+name: Build distro image
+description: Build and cache a celily distro image (requires LXD)
+inputs:
+  distro:
+    description: "Distro to build (arch, ubuntu-22.04, ubuntu-24.04, debian-12)"
+    required: true
+  backend:
+    description: "Container backend"
+    required: true
+    default: "lxd"
+  image-alias:
+    description: "Alias for the imported image (defaults to celily-<distro>)"
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Validate backend
+      if: inputs.backend != 'lxd'
+      env:
+        BACKEND: ${{ inputs.backend }}
+      shell: bash
+      run: |
+        printf 'Unsupported backend: %s. Only "lxd" is supported.\n' \
+          "${BACKEND}" >&2
+        exit 1
+    - name: Resolve image alias
+      id: alias
+      env:
+        DISTRO: ${{ inputs.distro }}
+        IMAGE_ALIAS: ${{ inputs.image-alias }}
+      shell: bash
+      run: |
+        if [[ -n "${IMAGE_ALIAS}" ]]; then
+          printf 'alias=%s\n' "${IMAGE_ALIAS}" >> "${GITHUB_OUTPUT}"
+        else
+          printf 'alias=celily-%s\n' "${DISTRO}" >> "${GITHUB_OUTPUT}"
+        fi
+    - name: Restore cached image
+      id: cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: .celily-image-cache
+        key: celily-image-${{ inputs.backend }}-${{ inputs.distro }}-${{ hashFiles('scripts/build-image.sh') }}
+    - name: Build and export image
+      if: steps.cache.outputs.cache-hit != 'true'
+      env:
+        DISTRO: ${{ inputs.distro }}
+      shell: bash
+      run: |
+        mkdir -p .celily-image-cache
+        sg lxd -c "scripts/build-image.sh --distro=${DISTRO} --export=${PWD}/.celily-image-cache"
+    - name: Import cached image
+      if: steps.cache.outputs.cache-hit == 'true'
+      env:
+        ALIAS: ${{ steps.alias.outputs.alias }}
+        DISTRO: ${{ inputs.distro }}
+      shell: bash
+      run: |-
+        sg lxd -c "lxc image import ${PWD}/.celily-image-cache/celily-${DISTRO}/ ${ALIAS}"
