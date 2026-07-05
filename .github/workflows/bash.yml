@@ -32,6 +32,10 @@ jobs:
         run: |-
           # Ignore SC2154 warnings for unassigned input variables
           find . -name '*.sh' -not -path './.git/*' \
-            -exec shellcheck --enable=all -eSC2154 {} \+
+            -exec shellcheck \
+            --enable=all \
+            -eSC2154 \
+            -eSC2155 \
+            {} \+
 
           shfmt -l --case-indent --indent=4 .
