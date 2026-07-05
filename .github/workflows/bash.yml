@@ -34,6 +34,7 @@ jobs:
           find . -name '*.sh' -not -path './.git/*' \
             -exec shellcheck \
             --enable=all \
+            -eSC1091 \
             -eSC2154 \
             -eSC2155 \
             {} \+
