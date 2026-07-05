@@ -1,5 +1,5 @@
 formatter:
   type: basic
-  disallow_anchors: true
+  disallow_anchors: false
   trim_trailing_whitespace: true
   force_quote_style: "double"
