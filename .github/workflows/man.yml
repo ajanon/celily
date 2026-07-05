@@ -2,20 +2,10 @@ name: Man Pages
 permissions:
   contents: read
 on:
-  pull_request:
-    paths:
-      - "man/**"
-      - "Makefile"
-      - ".github/workflows/man.yml"
-  push:
-    branches: [main]
-    paths:
-      - "man/**"
-      - "Makefile"
-      - ".github/workflows/man.yml"
+  workflow_call:
   workflow_dispatch:
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-man-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   build:

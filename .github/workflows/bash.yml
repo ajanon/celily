@@ -2,18 +2,10 @@ name: Bash
 permissions:
   contents: read
 on:
-  pull_request:
-    paths:
-      - "**/*.sh"
-      - ".github/workflows/bash.yml"
-  push:
-    branches: [main]
-    paths:
-      - "**/*.sh"
-      - ".github/workflows/bash.yml"
+  workflow_call:
   workflow_dispatch:
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-bash-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   check:

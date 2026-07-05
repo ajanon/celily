@@ -1,0 +1,102 @@
+name: CI
+permissions:
+  contents: read
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      python: ${{ steps.filter.outputs.python }}
+      bash: ${{ steps.filter.outputs.bash }}
+      markdown: ${{ steps.filter.outputs.markdown }}
+      man: ${{ steps.filter.outputs.man }}
+      yaml: ${{ steps.filter.outputs.yaml }}
+      workflows: ${{ steps.filter.outputs.workflows }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+        id: filter
+        with:
+          filters: |
+            rust:
+              - '**/*.rs'
+              - '**/Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.github/workflows/rust.yml'
+              - '.github/workflows/ci.yml'
+            python:
+              - '**/*.py'
+              - '.github/workflows/python.yml'
+              - '.github/workflows/ci.yml'
+            bash:
+              - '**/*.sh'
+              - '.github/workflows/bash.yml'
+              - '.github/workflows/ci.yml'
+            markdown:
+              - '**/*.md'
+              - '.github/workflows/markdown.yml'
+              - '.github/workflows/ci.yml'
+            man:
+              - 'man/**'
+              - 'Makefile'
+              - '.github/workflows/man.yml'
+              - '.github/workflows/ci.yml'
+            yaml:
+              - '**/*.yaml'
+              - '**/*.yml'
+              - '.github/workflows/yaml.yml'
+              - '.github/workflows/ci.yml'
+            workflows:
+              - '.github/**'
+  rust:
+    name: Rust
+    needs: changes
+    if: ${{ needs.changes.outputs.rust == 'true' }}
+    uses: ./.github/workflows/rust.yml
+  python:
+    name: Python
+    needs: changes
+    if: ${{ needs.changes.outputs.python == 'true' }}
+    uses: ./.github/workflows/python.yml
+  bash:
+    name: Bash
+    needs: changes
+    if: ${{ needs.changes.outputs.bash == 'true' }}
+    uses: ./.github/workflows/bash.yml
+  markdown:
+    name: Markdown
+    needs: changes
+    if: ${{ needs.changes.outputs.markdown == 'true' }}
+    uses: ./.github/workflows/markdown.yml
+  man:
+    name: Man Pages
+    needs: changes
+    if: ${{ needs.changes.outputs.man == 'true' }}
+    uses: ./.github/workflows/man.yml
+  yaml:
+    name: YAML
+    needs: changes
+    if: ${{ needs.changes.outputs.yaml == 'true' }}
+    uses: ./.github/workflows/yaml.yml
+  validate-workflows:
+    name: Validate GitHub Workflows
+    needs: changes
+    if: ${{ needs.changes.outputs.workflows == 'true' }}
+    permissions:
+      contents: read
+      security-events: write # Necessary for zizmor
+    uses: ./.github/workflows/validate-github-workflows.yml
