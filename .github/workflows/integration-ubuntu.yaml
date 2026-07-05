@@ -1,0 +1,65 @@
+name: Integration (Ubuntu)
+permissions:
+  contents: read
+on:
+  workflow_call:
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-tests-ubuntu-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-image:
+    name: Build image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Setup LXD
+        run: sudo scripts/setup-lxd.sh
+      - uses: ./.github/actions/build-distro-image
+        with:
+          distro: arch
+  smoke:
+    name: "Smoke (${{ matrix.os }}, ${{ matrix.channel }})"
+    needs: build-image
+    timeout-minutes: 30
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - ubuntu-26.04
+        channel:
+          - 5.0/stable
+          - 5.21/stable
+          - 6/stable
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Setup LXD
+        env:
+          SNAP_CHANNEL: ${{ matrix.channel }}
+        run: sudo scripts/setup-lxd.sh --channel="${SNAP_CHANNEL}"
+      - uses: ./.github/actions/build-distro-image
+        with:
+          distro: arch
+      - name: Setup celily
+        run: sudo scripts/setup-celily.sh
+      - name: Configure celily
+        run: |
+          mkdir -p ~/.config/celily
+          chmod 700 ~/.config/celily
+          cat > ~/.config/celily/config.toml <<'EOF'
+          distro = "arch"
+          image = "celily-arch"
+          [backend]
+          type = "lxd"
+          EOF
+          chmod 600 ~/.config/celily/config.toml
+      - name: Smoke test
+        run: newgrp lxd -c "./target/debug/celily -- true"

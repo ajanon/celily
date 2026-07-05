@@ -22,6 +22,7 @@ jobs:
       man: ${{ steps.filter.outputs.man }}
       yaml: ${{ steps.filter.outputs.yaml }}
       workflows: ${{ steps.filter.outputs.workflows }}
+      integration: ${{ steps.filter.outputs.integration }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -62,6 +63,16 @@ jobs:
               - '.github/workflows/ci.yml'
             workflows:
               - '.github/**'
+            integration:
+              - '**/*.rs'
+              - '**/Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'scripts/**'
+              - 'share/celily-mitmproxy.py'
+              - '.github/workflows/integration-ubuntu.yaml'
+              - '.github/actions/build-distro-image/**'
+              - '.github/workflows/ci.yml'
   rust:
     name: Rust
     needs: changes
@@ -100,3 +111,8 @@ jobs:
       contents: read
       security-events: write # Necessary for zizmor
     uses: ./.github/workflows/validate-github-workflows.yml
+  integration:
+    name: Integration (Ubuntu)
+    needs: [changes, rust, python, bash, markdown, man, yaml, validate-workflows]
+    if: ${{ needs.changes.outputs.integration == 'true' && !failure() && !cancelled() }}
+    uses: ./.github/workflows/integration-ubuntu.yaml
