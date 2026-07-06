@@ -2,24 +2,10 @@ name: Rust
 permissions:
   contents: read
 on:
-  pull_request:
-    paths:
-      - "**/*.rs"
-      - "**/Cargo.toml"
-      - "Cargo.lock"
-      - "rust-toolchain.toml"
-      - ".github/workflows/rust.yml"
-  push:
-    branches: [main]
-    paths:
-      - "**/*.rs"
-      - "**/Cargo.toml"
-      - "Cargo.lock"
-      - "rust-toolchain.toml"
-      - ".github/workflows/rust.yml"
+  workflow_call:
   workflow_dispatch:
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-rust-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   check:

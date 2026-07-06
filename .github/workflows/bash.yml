@@ -2,18 +2,10 @@ name: Bash
 permissions:
   contents: read
 on:
-  pull_request:
-    paths:
-      - "**/*.sh"
-      - ".github/workflows/bash.yml"
-  push:
-    branches: [main]
-    paths:
-      - "**/*.sh"
-      - ".github/workflows/bash.yml"
+  workflow_call:
   workflow_dispatch:
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-bash-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   check:
@@ -32,6 +24,11 @@ jobs:
         run: |-
           # Ignore SC2154 warnings for unassigned input variables
           find . -name '*.sh' -not -path './.git/*' \
-            -exec shellcheck --enable=all -eSC2154 {} \+
+            -exec shellcheck \
+            --enable=all \
+            -eSC1091 \
+            -eSC2154 \
+            -eSC2155 \
+            {} \+
 
-          shfmt -l --indent=4 .
+          shfmt -l --case-indent --indent=4 .

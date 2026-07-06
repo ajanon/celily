@@ -1,16 +1,10 @@
 name: Validate GitHub Workflows
 permissions: {}
 on:
-  pull_request:
-    paths:
-      - ".github/**"
-  push:
-    branches: [main]
-    paths:
-      - ".github/**"
+  workflow_call:
   workflow_dispatch:
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-github-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   validate:

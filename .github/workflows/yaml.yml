@@ -2,20 +2,10 @@ name: YAML
 permissions:
   contents: read
 on:
-  pull_request:
-    paths:
-      - "**/.yaml"
-      - "**/.yml"
-      - ".github/workflows/yaml.yml"
-  push:
-    branches: [main]
-    paths:
-      - "**/.yaml"
-      - "**/.yml"
-      - ".github/workflows/yaml.yml"
+  workflow_call:
   workflow_dispatch:
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-yaml-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   check:
