@@ -1,5 +1,4 @@
 use std::collections::BTreeSet;
-use std::thread::sleep;
 use std::time::Duration;
 
 use tracing::info;
@@ -34,7 +33,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Initialized<IB>> 
         &self.config.name
     }
 
-    pub fn start(self) -> Result<Instance<IB, NB, Running<IB>>, InstanceError<IB::Error>> {
+    pub async fn start(self) -> Result<Instance<IB, NB, Running<IB>>, InstanceError<IB::Error>> {
         self.instance_backend
             .start(&self.config.name)
             .map_err(|e| InstanceError::backend("failed to start instance", e))?;
@@ -51,7 +50,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Initialized<IB>> 
                 },
                 _ => {},
             }
-            sleep(Duration::from_millis(500));
+            tokio::time::sleep(Duration::from_millis(500)).await;
         }
         if !ready {
             return Err(InstanceError::Timeout {

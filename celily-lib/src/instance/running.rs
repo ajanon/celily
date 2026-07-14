@@ -31,7 +31,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Running<IB>> {
         &self.config.name
     }
 
-    pub fn exec(
+    pub async fn exec(
         &self,
         command: &[String],
         env: &HashMap<String, String>,

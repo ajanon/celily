@@ -22,7 +22,7 @@ use crate::util::bridge_name;
 
 /// Top-level application logic: load config, resolve context, build
 /// the isolated environment via the library, then run the command.
-fn run() -> anyhow::Result<i32> {
+async fn run() -> anyhow::Result<i32> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::builder()
@@ -137,9 +137,9 @@ fn run() -> anyhow::Result<i32> {
         .extra_devices(ctx.extra_devices.clone())
         .build();
 
-    let initialized = prepared.init()?;
+    let initialized = prepared.init().await?;
 
-    let running = initialized.start()?;
+    let running = initialized.start().await?;
 
     // --- Prepare environment ---
     // Proxy env vars are injected by exec() at highest priority.
@@ -154,11 +154,13 @@ fn run() -> anyhow::Result<i32> {
                  /tmp/celily-pre-run && /tmp/celily-pre-run; rc=$?; rm -f /tmp/celily-pre-run; \
                  exit $rc"
             );
-            let code = running.exec(
-                &["sh".into(), "-c".into(), wrapper],
-                &env_map,
-                Some(&ctx.project_dir),
-            )?;
+            let code = running
+                .exec(
+                    &["sh".into(), "-c".into(), wrapper],
+                    &env_map,
+                    Some(&ctx.project_dir),
+                )
+                .await?;
             if code != 0 {
                 return Ok(code);
             }
@@ -214,12 +216,16 @@ fn run() -> anyhow::Result<i32> {
         ];
         full_cmd.extend(raw_command);
 
-        running.exec(&full_cmd, &env_map, Some(&ctx.project_dir))?
+        running
+            .exec(&full_cmd, &env_map, Some(&ctx.project_dir))
+            .await?
     } else {
         if ctx.effective_readonly {
             env_map.insert("GIT_OPTIONAL_LOCKS".into(), "0".into());
         }
-        running.exec(&raw_command, &env_map, Some(&ctx.project_dir))?
+        running
+            .exec(&raw_command, &env_map, Some(&ctx.project_dir))
+            .await?
     };
 
     // Instance dropped here (lxc delete), then isolation bridge torn
@@ -228,8 +234,9 @@ fn run() -> anyhow::Result<i32> {
     Ok(code)
 }
 
-fn main() {
-    match run() {
+#[tokio::main]
+async fn main() {
+    match run().await {
         Ok(code) => std::process::exit(code),
         Err(e) => {
             tracing::error!("{:#}", e);
