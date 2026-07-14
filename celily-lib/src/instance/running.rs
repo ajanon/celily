@@ -55,6 +55,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Running<IB>> {
                 Some(&self.config.container_home),
                 Some(&proxy_url),
             )
+            .await
             .map_err(|e| InstanceError::backend("failed to run lxc exec", e))?;
 
         Ok(code)

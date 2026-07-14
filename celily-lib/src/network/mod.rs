@@ -55,6 +55,7 @@ impl NetworkIsolation {
     ) -> Result<(Self, String), NetworkError> {
         let (bridge_guard, gateway_ip) = backend
             .create_bridge(bridge_name, params)
+            .await
             .map_err(|e| NetworkError::Backend(Box::new(e)))?;
 
         // Resolve auth secrets (each unique name once).

@@ -1,18 +1,21 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use async_trait::async_trait;
+
 use super::LxcBackend;
 use crate::backend::{Device, InstanceConfig};
-use crate::command::{CommandError, CommandExt};
+use crate::command::{AsyncCommandExt, CommandError, CommandExt};
 use crate::mount::AccessMode;
 
+#[async_trait]
 impl crate::backend::InstanceBackend for LxcBackend {
     type Error = CommandError;
 
-    fn create(&self, name: &str, config: &InstanceConfig) -> Result<(), Self::Error> {
-        self.ensure_project()?;
+    async fn create(&self, name: &str, config: &InstanceConfig) -> Result<(), Self::Error> {
+        self.ensure_project().await?;
 
-        let mut cmd = self.lxc_project_command();
+        let mut cmd = self.lxc_project_command_async();
         cmd.args(["init", &config.image, name]);
 
         // Root disk -- profile provides pool and path; we override size
@@ -68,13 +71,16 @@ impl crate::backend::InstanceBackend for LxcBackend {
         }
 
         cmd.args(["--config", "security.devlxd=false"]);
-        cmd.run()?;
+        cmd.run().await?;
 
         Ok(())
     }
 
-    fn start(&self, name: &str) -> Result<(), Self::Error> {
-        self.lxc_project_command().args(["start", name]).run()
+    async fn start(&self, name: &str) -> Result<(), Self::Error> {
+        self.lxc_project_command_async()
+            .args(["start", name])
+            .run()
+            .await
     }
 
     fn delete(&self, name: &str) -> Result<(), Self::Error> {
@@ -83,7 +89,12 @@ impl crate::backend::InstanceBackend for LxcBackend {
             .run()
     }
 
-    fn add_device(&self, name: &str, dev_name: &str, device: &Device) -> Result<(), Self::Error> {
+    async fn add_device(
+        &self,
+        name: &str,
+        dev_name: &str,
+        device: &Device,
+    ) -> Result<(), Self::Error> {
         match device {
             Device::Disk {
                 source,
@@ -105,7 +116,7 @@ impl crate::backend::InstanceBackend for LxcBackend {
                 if access == &AccessMode::ReadOnly {
                     args.push("readonly=true");
                 }
-                self.lxc_project_command().args(&args).run()
+                self.lxc_project_command_async().args(&args).run().await
             },
             Device::Proxy {
                 connect,
@@ -116,29 +127,31 @@ impl crate::backend::InstanceBackend for LxcBackend {
                 host_gid,
                 bind,
                 mode,
-            } => self
-                .lxc_project_command()
-                .args([
-                    "config",
-                    "device",
-                    "add",
-                    name,
-                    dev_name,
-                    "proxy",
-                    &format!("bind={bind}"),
-                    &format!("connect={connect}"),
-                    &format!("listen={listen}"),
-                    &format!("mode={mode}"),
-                    &format!("uid={uid}"),
-                    &format!("gid={gid}"),
-                    &format!("security.uid={host_uid}"),
-                    &format!("security.gid={host_gid}"),
-                ])
-                .run(),
+            } => {
+                self.lxc_project_command_async()
+                    .args([
+                        "config",
+                        "device",
+                        "add",
+                        name,
+                        dev_name,
+                        "proxy",
+                        &format!("bind={bind}"),
+                        &format!("connect={connect}"),
+                        &format!("listen={listen}"),
+                        &format!("mode={mode}"),
+                        &format!("uid={uid}"),
+                        &format!("gid={gid}"),
+                        &format!("security.uid={host_uid}"),
+                        &format!("security.gid={host_gid}"),
+                    ])
+                    .run()
+                    .await
+            },
         }
     }
 
-    fn attach_to_bridge(
+    async fn attach_to_bridge(
         &self,
         name: &str,
         bridge_name: &str,
@@ -161,11 +174,11 @@ impl crate::backend::InstanceBackend for LxcBackend {
         if let Some(egress) = network_egress {
             args.push(format!("limits.egress={egress}"));
         }
-        self.lxc_project_command().args(&args).run()
+        self.lxc_project_command_async().args(&args).run().await
     }
 
-    fn set_description(&self, name: &str, desc: &str) -> Result<(), Self::Error> {
-        self.lxc_project_command()
+    async fn set_description(&self, name: &str, desc: &str) -> Result<(), Self::Error> {
+        self.lxc_project_command_async()
             .args([
                 "config",
                 "set",
@@ -174,9 +187,10 @@ impl crate::backend::InstanceBackend for LxcBackend {
                 &format!("description={desc}"),
             ])
             .run()
+            .await
     }
 
-    fn exec(
+    async fn exec(
         &self,
         name: &str,
         command: &[String],
@@ -187,7 +201,7 @@ impl crate::backend::InstanceBackend for LxcBackend {
         home: Option<&Path>,
         proxy_url: Option<&str>,
     ) -> Result<i32, Self::Error> {
-        let mut cmd = self.lxc_project_command();
+        let mut cmd = self.lxc_project_command_async();
         cmd.arg("exec")
             .arg(name)
             .arg("--user")
@@ -214,18 +228,19 @@ impl crate::backend::InstanceBackend for LxcBackend {
         cmd.arg("--");
         cmd.args(command);
 
-        let code = cmd.status()?.code().unwrap_or(1);
+        let status = cmd.status().await?;
+        let code = status.code().unwrap_or(1);
         Ok(code)
     }
 
-    fn exec_stdout(&self, name: &str, command: &[&str]) -> Result<String, Self::Error> {
-        let mut cmd = self.lxc_project_command();
+    async fn exec_stdout(&self, name: &str, command: &[&str]) -> Result<String, Self::Error> {
+        let mut cmd = self.lxc_project_command_async();
         cmd.args(["exec", name, "--"]);
         cmd.args(command);
-        cmd.run_stdout()
+        cmd.run_stdout().await
     }
 
-    fn write_file(
+    async fn write_file(
         &self,
         name: &str,
         content: &[u8],
@@ -234,12 +249,11 @@ impl crate::backend::InstanceBackend for LxcBackend {
         uid: u32,
         gid: u32,
     ) -> Result<(), Self::Error> {
-        use std::io::Write as _;
-        use std::process::Stdio;
+        use tokio::io::AsyncWriteExt;
 
         let dest = format!("{name}/{path}");
         let mut child = self
-            .lxc_project_command()
+            .lxc_project_command_async()
             .args([
                 "file",
                 "push",
@@ -253,7 +267,7 @@ impl crate::backend::InstanceBackend for LxcBackend {
                 "--gid",
                 &gid.to_string(),
             ])
-            .stdin(Stdio::piped())
+            .stdin(std::process::Stdio::piped())
             .spawn()
             .map_err(CommandError::Io)?;
 
@@ -267,9 +281,10 @@ impl crate::backend::InstanceBackend for LxcBackend {
                 ))
             })?
             .write_all(content)
+            .await
             .map_err(CommandError::Io)?;
 
-        let status = child.wait().map_err(CommandError::Io)?;
+        let status = child.wait().await.map_err(CommandError::Io)?;
         if !status.success() {
             return Err(CommandError::NonZero {
                 argv: format!("{} file push ... {dest}", self.binary),

@@ -5,6 +5,8 @@ use std::net::IpAddr;
 use std::path::Path;
 use std::sync::Mutex;
 
+use async_trait::async_trait;
+
 use super::{BridgeGuard, CreateBridgeParams, Device, InstanceConfig};
 
 /// A mock [`super::InstanceBackend`] that records all calls for verification.
@@ -37,17 +39,18 @@ pub enum MockInstanceCall {
 #[error("mock error")]
 pub struct MockError;
 
+#[async_trait]
 impl super::InstanceBackend for MockInstanceBackend {
     type Error = MockError;
 
-    fn create(&self, name: &str, _config: &InstanceConfig) -> Result<(), Self::Error> {
+    async fn create(&self, name: &str, _config: &InstanceConfig) -> Result<(), Self::Error> {
         self.calls.lock().unwrap().push(MockInstanceCall::Create {
             name: name.to_string(),
         });
         Ok(())
     }
 
-    fn start(&self, name: &str) -> Result<(), Self::Error> {
+    async fn start(&self, name: &str) -> Result<(), Self::Error> {
         self.calls.lock().unwrap().push(MockInstanceCall::Start {
             name: name.to_string(),
         });
@@ -61,7 +64,12 @@ impl super::InstanceBackend for MockInstanceBackend {
         Ok(())
     }
 
-    fn add_device(&self, name: &str, dev_name: &str, _device: &Device) -> Result<(), Self::Error> {
+    async fn add_device(
+        &self,
+        name: &str,
+        dev_name: &str,
+        _device: &Device,
+    ) -> Result<(), Self::Error> {
         self.calls
             .lock()
             .unwrap()
@@ -72,7 +80,7 @@ impl super::InstanceBackend for MockInstanceBackend {
         Ok(())
     }
 
-    fn attach_to_bridge(
+    async fn attach_to_bridge(
         &self,
         name: &str,
         bridge: &str,
@@ -89,7 +97,7 @@ impl super::InstanceBackend for MockInstanceBackend {
         Ok(())
     }
 
-    fn set_description(&self, name: &str, _desc: &str) -> Result<(), Self::Error> {
+    async fn set_description(&self, name: &str, _desc: &str) -> Result<(), Self::Error> {
         self.calls
             .lock()
             .unwrap()
@@ -99,7 +107,7 @@ impl super::InstanceBackend for MockInstanceBackend {
         Ok(())
     }
 
-    fn exec(
+    async fn exec(
         &self,
         name: &str,
         _cmd: &[String],
@@ -116,7 +124,7 @@ impl super::InstanceBackend for MockInstanceBackend {
         Ok(0)
     }
 
-    fn exec_stdout(&self, name: &str, _cmd: &[&str]) -> Result<String, Self::Error> {
+    async fn exec_stdout(&self, name: &str, _cmd: &[&str]) -> Result<String, Self::Error> {
         self.calls
             .lock()
             .unwrap()
@@ -126,7 +134,7 @@ impl super::InstanceBackend for MockInstanceBackend {
         Ok("running".to_string())
     }
 
-    fn write_file(
+    async fn write_file(
         &self,
         name: &str,
         _content: &[u8],
@@ -187,10 +195,11 @@ impl Drop for MockBridgeGuard {
     }
 }
 
+#[async_trait]
 impl super::NetworkBackend for MockNetworkBackend {
     type Error = MockError;
 
-    fn create_bridge(
+    async fn create_bridge(
         &self,
         name: &str,
         _params: &CreateBridgeParams,

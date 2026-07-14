@@ -36,6 +36,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Initialized<IB>> 
     pub async fn start(self) -> Result<Instance<IB, NB, Running<IB>>, InstanceError<IB::Error>> {
         self.instance_backend
             .start(&self.config.name)
+            .await
             .map_err(|e| InstanceError::backend("failed to start instance", e))?;
 
         let mut ready = false;
@@ -43,6 +44,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Initialized<IB>> 
             match self
                 .instance_backend
                 .exec_stdout(&self.config.name, &["systemctl", "is-system-running"])
+                .await
             {
                 Ok(out) if out.trim() == "running" => {
                     ready = true;
@@ -71,6 +73,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Initialized<IB>> 
                 0,
                 0,
             )
+            .await
             .map_err(|e| InstanceError::backend("failed to push CA cert", e))?;
 
         self.instance_backend
@@ -78,6 +81,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Initialized<IB>> 
                 &self.config.name,
                 &[self.config.distro.rebuild_trust_store_command()],
             )
+            .await
             .map_err(|e| InstanceError::backend("failed to rebuild trust store", e))?;
 
         info!(instance = %self.config.name, "CA cert pushed, trust store rebuilt");
@@ -109,6 +113,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Initialized<IB>> 
                         &self.config.name,
                         &["chown", &owner, &parent.display().to_string()],
                     )
+                    .await
                     .map_err(|e| InstanceError::backend("failed to chown mount parent", e))?;
             }
         }

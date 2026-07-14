@@ -10,7 +10,7 @@
 //! [`set_raw_dnsmasq`](LxdBridge::set_raw_dnsmasq) are the building blocks.
 
 use std::net::IpAddr;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use tracing::{error, info};
 
@@ -20,7 +20,7 @@ use crate::command::CommandError;
 pub(crate) struct LxdBridge {
     pub name: String,
     lxd: Arc<LxcBackend>,
-    gateway_ip: OnceLock<IpAddr>,
+    gateway_ip: tokio::sync::OnceCell<IpAddr>,
     keep: bool,
 }
 
@@ -31,47 +31,48 @@ impl LxdBridge {
     /// is in place. The gateway IP is queried lazily on first call to
     /// [`get_gateway_ip`](Self::get_gateway_ip) -- the split guarantees that
     /// `Drop` still runs and destroys the bridge if any later step fails.
-    pub(crate) fn create(
+    pub(crate) async fn create(
         lxd: Arc<LxcBackend>,
         name: &str,
         keep: bool,
     ) -> Result<Self, CommandError> {
         let name = name.to_string();
-        lxd.create_network(&name)?;
+        lxd.create_network(&name).await?;
         info!(bridge = %name, "created isolation bridge");
         Ok(Self {
             name,
             lxd,
-            gateway_ip: OnceLock::new(),
+            gateway_ip: tokio::sync::OnceCell::new(),
             keep,
         })
     }
 
     /// Query the gateway IP from LXD, caching the result.
-    pub(crate) fn get_gateway_ip(&self) -> Result<IpAddr, CommandError> {
+    pub(crate) async fn get_gateway_ip(&self) -> Result<IpAddr, CommandError> {
         self.gateway_ip
-            .get_or_try_init(|| {
-                let ip = self.lxd.get_network_ipv4(&self.name)?;
+            .get_or_try_init(|| async {
+                let ip = self.lxd.get_network_ipv4(&self.name).await?;
                 info!(bridge = %self.name, gateway = %ip, "queried bridge gateway IP");
                 Ok(ip)
             })
-            .map(|ip| *ip)
+            .await
+            .copied()
     }
 
     /// Set the `raw.dnsmasq` config key on this bridge.
-    pub(crate) fn set_raw_dnsmasq(&self, dnsmasq: &str) -> Result<(), CommandError> {
+    pub(crate) async fn set_raw_dnsmasq(&self, dnsmasq: &str) -> Result<(), CommandError> {
         info!(bridge = %self.name, "setting raw.dnsmasq on bridge");
-        self.lxd.set_network_dnsmasq(&self.name, dnsmasq)
+        self.lxd.set_network_dnsmasq(&self.name, dnsmasq).await
     }
 
     /// Attach an ACL to this bridge via `security.acls`.
-    pub(crate) fn attach_acl(&self, acl_name: &str) -> Result<(), CommandError> {
-        self.lxd.attach_acl_to_network(&self.name, acl_name)
+    pub(crate) async fn attach_acl(&self, acl_name: &str) -> Result<(), CommandError> {
+        self.lxd.attach_acl_to_network(&self.name, acl_name).await
     }
 
     /// Set the default egress action to `reject` on this bridge.
-    pub(crate) fn set_default_egress_reject(&self) -> Result<(), CommandError> {
-        self.lxd.set_network_egress_reject(&self.name)
+    pub(crate) async fn set_default_egress_reject(&self) -> Result<(), CommandError> {
+        self.lxd.set_network_egress_reject(&self.name).await
     }
 }
 

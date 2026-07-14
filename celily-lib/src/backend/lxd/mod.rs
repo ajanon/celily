@@ -3,7 +3,7 @@ mod bridge;
 pub mod instance;
 pub mod network;
 
-use crate::command::{CommandError, CommandExt};
+use crate::command::{AsyncCommandExt, CommandError};
 
 /// LXC-family backend -- spawns the `lxc` or `incus` CLI for all operations.
 ///
@@ -53,13 +53,13 @@ impl LxcBackend {
     /// Also ensures the project's default profile has a root disk device
     /// pointing at the configured [`pool`](Self::pool), since instances
     /// require a root disk at creation time.
-    pub fn ensure_project(&self) -> Result<(), CommandError> {
+    pub async fn ensure_project(&self) -> Result<(), CommandError> {
         let Some(ref project) = self.project else {
             return Ok(());
         };
 
         match self
-            .lxc_project_command()
+            .lxc_project_command_async()
             .args([
                 "project",
                 "create",
@@ -68,6 +68,7 @@ impl LxcBackend {
                 "features.images=true",
             ])
             .run()
+            .await
         {
             Ok(()) => {},
             Err(CommandError::NonZero { ref stderr, .. })
@@ -83,7 +84,7 @@ impl LxcBackend {
         //
         // The profile is otherwise empty -- no bridge NIC, clean.
         let root_res = self
-            .lxc_project_command()
+            .lxc_project_command_async()
             .args([
                 "profile",
                 "device",
@@ -94,7 +95,8 @@ impl LxcBackend {
                 "path=/",
                 &format!("pool={}", self.pool),
             ])
-            .run();
+            .run()
+            .await;
 
         match root_res {
             Ok(()) => {},
@@ -105,11 +107,12 @@ impl LxcBackend {
             {
                 // Device exists from a previous run -- set the pool
                 // to reconcile in case it changed.
-                self.lxc_project_command()
+                self.lxc_project_command_async()
                     .args([
                         "profile", "device", "set", "default", "root", "pool", &self.pool,
                     ])
-                    .run()?;
+                    .run()
+                    .await?;
             },
             Err(e) => return Err(e),
         }
@@ -132,6 +135,27 @@ impl LxcBackend {
     /// Used for instance and profile operations.
     pub(super) fn lxc_project_command(&self) -> std::process::Command {
         let mut cmd = std::process::Command::new(self.binary);
+        if let Some(ref project) = self.project {
+            cmd.args(["--project", project]);
+        }
+        if let Some(ref remote) = self.remote {
+            cmd.args(["--remote", remote]);
+        }
+        cmd
+    }
+
+    /// Async variant of [`lxc_command`](Self::lxc_command).
+    pub(super) fn lxc_command_async(&self) -> tokio::process::Command {
+        let mut cmd = tokio::process::Command::new(self.binary);
+        if let Some(ref remote) = self.remote {
+            cmd.args(["--remote", remote]);
+        }
+        cmd
+    }
+
+    /// Async variant of [`lxc_project_command`](Self::lxc_project_command).
+    pub(super) fn lxc_project_command_async(&self) -> tokio::process::Command {
+        let mut cmd = tokio::process::Command::new(self.binary);
         if let Some(ref project) = self.project {
             cmd.args(["--project", project]);
         }

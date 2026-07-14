@@ -1,33 +1,36 @@
 use std::net::IpAddr;
 use std::sync::Arc;
-use std::thread;
+
+use async_trait::async_trait;
 
 use super::LxcBackend;
 use super::acl::{self, NetworkAcl, NetworkAclRule, rule_to_cli_args};
 use super::bridge::LxdBridge;
 use crate::backend::{BridgeGuard, CreateBridgeParams, NetworkBackend};
-use crate::command::{CommandError, CommandExt};
+use crate::command::{AsyncCommandExt, CommandError, CommandExt};
 
 // ---------------------------------------------------------------------------
 // Internal primitives (used by guards and the trait impl)
 // ---------------------------------------------------------------------------
 
 impl LxcBackend {
-    pub(crate) fn create_network(&self, name: &str) -> Result<(), CommandError> {
-        self.lxc_command()
+    pub(crate) async fn create_network(&self, name: &str) -> Result<(), CommandError> {
+        self.lxc_command_async()
             .args(["network", "create", name, "--type", "bridge"])
             .run()
+            .await
     }
 
     pub(crate) fn delete_network(&self, name: &str) -> Result<(), CommandError> {
         self.lxc_command().args(["network", "delete", name]).run()
     }
 
-    pub(crate) fn get_network_ipv4(&self, name: &str) -> Result<IpAddr, CommandError> {
+    pub(crate) async fn get_network_ipv4(&self, name: &str) -> Result<IpAddr, CommandError> {
         let raw = self
-            .lxc_command()
+            .lxc_command_async()
             .args(["network", "get", name, "ipv4.address"])
-            .run_stdout()?;
+            .run_stdout()
+            .await?;
         let ip_str = raw.split('/').next().unwrap_or(&raw);
         ip_str.parse().map_err(|_| {
             CommandError::Io(std::io::Error::new(
@@ -37,24 +40,30 @@ impl LxcBackend {
         })
     }
 
-    pub(crate) fn set_network_dnsmasq(
+    pub(crate) async fn set_network_dnsmasq(
         &self,
         name: &str,
         dnsmasq: &str,
     ) -> Result<(), CommandError> {
-        self.lxc_command()
+        self.lxc_command_async()
             .args(["network", "set", name, &format!("raw.dnsmasq={dnsmasq}")])
             .run()
+            .await
     }
 
-    pub(crate) fn attach_acl_to_network(&self, net: &str, acl: &str) -> Result<(), CommandError> {
-        self.lxc_command()
+    pub(crate) async fn attach_acl_to_network(
+        &self,
+        net: &str,
+        acl: &str,
+    ) -> Result<(), CommandError> {
+        self.lxc_command_async()
             .args(["network", "set", net, &format!("security.acls={acl}")])
             .run()
+            .await
     }
 
-    pub(crate) fn set_network_egress_reject(&self, name: &str) -> Result<(), CommandError> {
-        self.lxc_command()
+    pub(crate) async fn set_network_egress_reject(&self, name: &str) -> Result<(), CommandError> {
+        self.lxc_command_async()
             .args([
                 "network",
                 "set",
@@ -62,15 +71,17 @@ impl LxcBackend {
                 "security.acls.default.egress.action=reject",
             ])
             .run()
+            .await
     }
 
-    pub(crate) fn create_acl(&self, name: &str) -> Result<(), CommandError> {
-        self.lxc_command()
+    pub(crate) async fn create_acl(&self, name: &str) -> Result<(), CommandError> {
+        self.lxc_command_async()
             .args(["network", "acl", "create", name])
             .run()
+            .await
     }
 
-    pub(crate) fn add_acl_rule(
+    pub(crate) async fn add_acl_rule(
         &self,
         acl: &str,
         rule: &NetworkAclRule,
@@ -78,7 +89,7 @@ impl LxcBackend {
         let cli_args = rule_to_cli_args(rule);
         let mut args = vec!["network", "acl", "rule", "add", acl];
         args.extend(cli_args.iter().map(|s| s.as_str()));
-        self.lxc_command().args(&args).run()
+        self.lxc_command_async().args(&args).run().await
     }
 
     pub(crate) fn delete_acl(&self, name: &str) -> Result<(), CommandError> {
@@ -124,10 +135,11 @@ server={gateway_ip}#{dns_port}
     })
 }
 
+#[async_trait]
 impl NetworkBackend for LxcBackend {
     type Error = CommandError;
 
-    fn create_bridge(
+    async fn create_bridge(
         &self,
         name: &str,
         params: &CreateBridgeParams,
@@ -136,37 +148,35 @@ impl NetworkBackend for LxcBackend {
 
         // RAII guard in place immediately -- any failure from here on
         // destroys the network on drop.
-        let bridge = LxdBridge::create(Arc::clone(&lxd), name, params.keep)?;
+        let bridge = LxdBridge::create(Arc::clone(&lxd), name, params.keep).await?;
 
-        let gateway_ip = bridge.get_gateway_ip()?;
+        let gateway_ip = bridge.get_gateway_ip().await?;
         let gateway_str = gateway_ip.to_string();
 
         let acl_rules = acl::build_rules_from_params(params, &gateway_str);
 
         // RAII guard for the ACL -- any failure from here on destroys
         // both the ACL and the bridge (in that order).
-        let acl = NetworkAcl::create(Arc::clone(&lxd), name, params.keep)?;
+        let acl = NetworkAcl::create(Arc::clone(&lxd), name, params.keep).await?;
 
         // Add ACL rules and set dnsmasq in parallel. Both are
         // independent -- rules mutate the ACL, dnsmasq mutates the bridge.
         let dnsmasq_config = build_dnsmasq_config(params.dns, &gateway_str, params.dns_port);
 
-        thread::scope(|s| {
-            let h1 = s.spawn(|| acl.add_rules(&acl_rules));
-            let h2 = s.spawn(|| {
-                if let Some(ref config) = dnsmasq_config {
-                    bridge.set_raw_dnsmasq(config)
-                } else {
-                    Ok(())
-                }
-            });
-            h1.join().unwrap()?;
-            h2.join().unwrap()?;
-            Ok::<_, CommandError>(())
-        })?;
+        let acl_future = acl.add_rules(&acl_rules);
+        let dnsmasq_future = async {
+            if let Some(ref config) = dnsmasq_config {
+                bridge.set_raw_dnsmasq(config).await
+            } else {
+                Ok(())
+            }
+        };
+        let (acl_result, dnsmasq_result) = tokio::join!(acl_future, dnsmasq_future);
+        acl_result?;
+        dnsmasq_result?;
 
-        bridge.set_default_egress_reject()?;
-        bridge.attach_acl(&acl.name)?;
+        bridge.set_default_egress_reject().await?;
+        bridge.attach_acl(&acl.name).await?;
 
         let guard = LxdBridgeGuard { bridge, acl };
         Ok((Box::new(guard), gateway_ip))

@@ -127,6 +127,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
 
         self.instance_backend
             .create(&self.config.name, &instance_config)
+            .await
             .map_err(|e| InstanceError::backend("failed to create instance", e))?;
 
         // RAII guard -- any failure from here on deletes the instance.
@@ -171,6 +172,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
                 };
                 self.instance_backend
                     .add_device(&self.config.name, &dev_name, &device)
+                    .await
                     .map_err(|e| InstanceError::backend("failed to add disk device", e))?;
             }
 
@@ -179,6 +181,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
                 let dev_name = format!("extra{i}");
                 self.instance_backend
                     .add_device(&self.config.name, &dev_name, device)
+                    .await
                     .map_err(|e| InstanceError::backend("failed to add extra device", e))?;
             }
 
@@ -186,6 +189,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
             if !self.config.description.is_empty() {
                 self.instance_backend
                     .set_description(&self.config.name, &self.config.description)
+                    .await
                     .map_err(|e| InstanceError::backend("failed to set description", e))?;
             }
 
@@ -204,6 +208,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
                 self.config.limits.network_ingress.as_deref(),
                 self.config.limits.network_egress.as_deref(),
             )
+            .await
             .map_err(|e| InstanceError::backend("failed to attach instance to bridge", e))?;
 
         Ok(Instance {
