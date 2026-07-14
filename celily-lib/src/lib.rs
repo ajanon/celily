@@ -19,7 +19,7 @@ pub use backend::{
     ProxyBind,
     TcpAllow,
 };
-pub use command::{ChildExt, CommandError, CommandExt, ShutdownStatus};
+pub use command::{AsyncCommandExt, ChildExt, CommandError, CommandExt, ShutdownStatus};
 pub use distro::DistroKind;
 pub use instance::{
     Initialized,
