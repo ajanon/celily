@@ -14,7 +14,6 @@ use tracing::{debug, error, info, warn};
 use super::params::{DNS_PORT, PROXY_PORT};
 use super::rule::NetworkRule;
 use crate::command::{ChildExt, ShutdownStatus};
-use crate::secrets::{SecretError, SecretProvider};
 use crate::{CleanupDir, CleanupPath};
 
 // ---------------------------------------------------------------------------
@@ -30,10 +29,6 @@ pub enum MitmProxyError {
         context: String,
         source: std::io::Error,
     },
-
-    /// A secret resolution error.
-    #[error(transparent)]
-    Secret(#[from] SecretError),
 
     /// JSON serialization or deserialization error.
     #[error(transparent)]
@@ -100,7 +95,7 @@ impl MitmProxy {
         gateway_ip: &str,
         dns_filter: bool,
         allow: &[NetworkRule],
-        provider: Option<&dyn SecretProvider<Error = SecretError>>,
+        auth_secrets: &HashMap<String, String>,
     ) -> Result<(Self, String), MitmProxyError> {
         let runtime_dir =
             PathBuf::from(
@@ -138,11 +133,8 @@ impl MitmProxy {
         fs::create_dir_all(socket_path.parent().unwrap())
             .map_err(|e| MitmProxyError::io_ctx("failed to create celily runtime dir", e))?;
 
-        // --- Resolve auth secrets (each unique name once) ---
-        let auth_secrets = Self::resolve_auth_secrets(allow, provider)?;
-
         // --- Build config JSON ---
-        let config_json = Self::build_config_json(dns_filter, allow, &auth_secrets)?;
+        let config_json = Self::build_config_json(dns_filter, allow, auth_secrets)?;
 
         // mitmdump connects to this socket during startup, so the
         // socket must be listening before we spawn the process.
@@ -198,30 +190,6 @@ impl MitmProxy {
             },
             ca_cert,
         ))
-    }
-
-    /// Resolve each unique `auth.secret` in the allow rules via the
-    /// configured provider, or error if secrets are present but no provider
-    /// is configured.
-    fn resolve_auth_secrets(
-        allow: &[NetworkRule],
-        provider: Option<&dyn SecretProvider<Error = SecretError>>,
-    ) -> Result<HashMap<String, String>, MitmProxyError> {
-        let mut secrets: HashMap<String, String> = HashMap::new();
-        for rule in allow {
-            if let NetworkRule::Http {
-                auth: Some(auth), ..
-            } = rule
-                && !secrets.contains_key(&auth.secret)
-            {
-                let p = provider.ok_or_else(|| SecretError::NoProvider {
-                    secret: auth.secret.clone(),
-                })?;
-                let value = p.resolve(&auth.secret)?;
-                secrets.insert(auth.secret.clone(), value);
-            }
-        }
-        Ok(secrets)
     }
 
     /// Build the config JSON blob to send to mitmdump.
