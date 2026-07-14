@@ -180,9 +180,9 @@ async fn run() -> anyhow::Result<i32> {
         let branch_template = cfg.worktree.branch.as_deref().unwrap_or("celily/{name}");
         let branch_name = branch_template.replace("{name}", &worktree_name);
 
-        crate::validate::validate_worktree_preconditions(&cwd, &branch_name)?;
+        crate::validate::validate_worktree_preconditions(&cwd, &branch_name).await?;
 
-        let (git_name, git_email) = resolve_git_identity(&args, &cfg.worktree, &cwd)?;
+        let (git_name, git_email) = resolve_git_identity(&args, &cfg.worktree, &cwd).await?;
         env_map.insert("GIT_AUTHOR_NAME".into(), git_name.clone());
         env_map.insert("GIT_AUTHOR_EMAIL".into(), git_email.clone());
         env_map.insert("GIT_COMMITTER_NAME".into(), git_name);
