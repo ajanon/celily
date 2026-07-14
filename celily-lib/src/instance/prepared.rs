@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::thread;
 
 use tracing::warn;
 
@@ -109,7 +108,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
 // ---------------------------------------------------------------------------
 
 impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
-    pub fn init(self) -> Result<Instance<IB, NB, Initialized<IB>>, InstanceError<IB::Error>> {
+    pub async fn init(self) -> Result<Instance<IB, NB, Initialized<IB>>, InstanceError<IB::Error>> {
         // Build backend config and create the instance.
         let instance_config = InstanceConfig {
             image: self.config.image.clone(),
@@ -137,21 +136,21 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
             self.config.keep,
         );
 
-        // Add devices and set up network isolation in parallel.
-        let (isolation, ca_cert) = thread::scope(|s| {
-            let iso_handle = s.spawn({
-                let nb = Arc::clone(&self.network_backend);
-                let cbp = self
-                    .config
-                    .network
-                    .to_create_bridge_params(self.config.keep);
-                let provider = self.secret_provider.as_deref();
-                let bridge = self.config.bridge_name.clone();
-                let allow = self.config.network.allow.clone();
-                let dns = self.config.network.dns;
-                move || NetworkIsolation::setup(nb.as_ref(), &bridge, &cbp, &allow, dns, provider)
-            });
+        // Network setup and device attachment in parallel.
+        let iso_future = {
+            let nb = Arc::clone(&self.network_backend);
+            let cbp = self
+                .config
+                .network
+                .to_create_bridge_params(self.config.keep);
+            let provider = self.secret_provider.as_deref();
+            let bridge = self.config.bridge_name.clone();
+            let allow = self.config.network.allow.clone();
+            let dns = self.config.network.dns;
+            async move { NetworkIsolation::setup(nb.as_ref(), &bridge, &cbp, &allow, dns, provider) }
+        };
 
+        let devices_future = async {
             // Add mount devices while the bridge is being created.
             for (i, mount) in self.config.mounts.iter().enumerate() {
                 if self.config.kind == InstanceKind::Vm && mount.source.is_file() {
@@ -188,9 +187,12 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
                     .map_err(|e| InstanceError::backend("failed to set description", e))?;
             }
 
-            let (isolation, ca_cert) = iso_handle.join().unwrap()?;
-            Ok::<_, InstanceError<IB::Error>>((isolation, ca_cert))
-        })?;
+            Ok::<_, InstanceError<IB::Error>>(())
+        };
+
+        let (iso_result, devices_result) = tokio::join!(iso_future, devices_future);
+        devices_result?;
+        let (isolation, ca_cert) = iso_result?;
 
         // Attach instance to the isolation bridge.
         self.instance_backend
@@ -215,7 +217,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
         })
     }
 
-    pub fn launch(self) -> Result<Instance<IB, NB, Running<IB>>, InstanceError<IB::Error>> {
-        self.init()?.start()
+    pub async fn launch(self) -> Result<Instance<IB, NB, Running<IB>>, InstanceError<IB::Error>> {
+        self.init().await?.start().await
     }
 }
