@@ -10,7 +10,7 @@ pub enum ForbiddenError {
     #[error("path is under {label} (forbidden)")]
     Subtree { label: &'static str },
 }
-use celily_lib::CommandExt;
+use celily_lib::AsyncCommandExt;
 
 use crate::util::is_under_or_eq;
 
@@ -246,7 +246,10 @@ fn build_proxy_forbidden_list(home: &Path, runtime_dir: &Path) -> Vec<Forbidden>
 /// 4. The resolved branch name is valid (`git check-ref-format --branch`).
 ///
 /// All checks run on the host before touching LXD.
-pub fn validate_worktree_preconditions(project_dir: &Path, resolved_branch: &str) -> Result<()> {
+pub async fn validate_worktree_preconditions(
+    project_dir: &Path,
+    resolved_branch: &str,
+) -> Result<()> {
     let dotgit = project_dir.join(".git");
 
     if !dotgit.exists() {
@@ -279,17 +282,19 @@ pub fn validate_worktree_preconditions(project_dir: &Path, resolved_branch: &str
     }
 
     // Verify the repository has at least one commit.
-    std::process::Command::new("git")
+    tokio::process::Command::new("git")
         .args(["-C"])
         .arg(project_dir)
         .args(["rev-parse", "HEAD"])
         .run_stdout()
+        .await
         .context("worktree mode requires at least one commit in the repository")?;
 
     // Validate the resolved branch name against git's rules.
-    std::process::Command::new("git")
+    tokio::process::Command::new("git")
         .args(["check-ref-format", "--branch", resolved_branch])
         .run()
+        .await
         .with_context(|| format!("invalid worktree branch name '{resolved_branch}'"))?;
 
     Ok(())
