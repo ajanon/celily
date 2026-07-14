@@ -183,27 +183,6 @@ impl ChildExt for std::process::Child {
 }
 
 // -------------------------------------------------------------------
-// run_parallel
-// -------------------------------------------------------------------
-
-/// Run multiple commands concurrently using a scoped thread per command.
-///
-/// Returns one result per command in the original order. A command that
-/// fails does not cancel the others -- every command completes.
-pub fn run_parallel(commands: Vec<Command>) -> Vec<Result<(), CommandError>> {
-    if commands.is_empty() {
-        return Vec::new();
-    }
-    std::thread::scope(|s| {
-        let handles: Vec<_> = commands
-            .into_iter()
-            .map(|mut cmd| s.spawn(move || cmd.run()))
-            .collect();
-        handles.into_iter().map(|h| h.join().unwrap()).collect()
-    })
-}
-
-// -------------------------------------------------------------------
 // helpers
 // -------------------------------------------------------------------
 
@@ -361,41 +340,5 @@ mod tests {
         };
         assert_eq!(code, Some(4));
         assert_eq!(stderr.as_deref(), Some("fail"));
-    }
-
-    // ---- run_parallel ----
-
-    #[test]
-    fn run_parallel_all_succeed() {
-        let cmds = vec![
-            Command::new("true"),
-            Command::new("true"),
-            Command::new("true"),
-        ];
-        let results = run_parallel(cmds);
-        assert_eq!(results.len(), 3);
-        for r in results {
-            r.expect("true should succeed");
-        }
-    }
-
-    #[test]
-    fn run_parallel_one_fails() {
-        let cmds = vec![
-            Command::new("true"),
-            Command::new("false"),
-            Command::new("true"),
-        ];
-        let results = run_parallel(cmds);
-        assert_eq!(results.len(), 3);
-        assert!(results[0].is_ok());
-        assert!(results[1].is_err());
-        assert!(results[2].is_ok());
-    }
-
-    #[test]
-    fn run_parallel_empty() {
-        let results = run_parallel(vec![]);
-        assert!(results.is_empty());
     }
 }
