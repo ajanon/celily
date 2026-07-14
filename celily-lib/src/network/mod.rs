@@ -69,7 +69,7 @@ impl NetworkIsolation {
                 let p = provider.ok_or_else(|| SecretError::NoProvider {
                     secret: auth.secret.clone(),
                 })?;
-                let value = p.resolve(&auth.secret)?;
+                let value = p.resolve(&auth.secret).await?;
                 auth_secrets.insert(auth.secret.clone(), value);
             }
         }

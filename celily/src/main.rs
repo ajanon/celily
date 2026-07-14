@@ -71,7 +71,7 @@ async fn run() -> anyhow::Result<i32> {
     let secret_provider: Option<Box<dyn SecretProvider<Error = celily_lib::SecretError>>> =
         if let Some(provider) = cfg.secret_provider {
             let provider = provider.resolve();
-            provider.check_available()?;
+            provider.check_available().await?;
             Some(provider)
         } else {
             None

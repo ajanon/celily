@@ -1,5 +1,7 @@
 mod rbw;
 
+use async_trait::async_trait;
+
 use crate::command::CommandError;
 
 /// Errors that can occur when interacting with a [`SecretProvider`].
@@ -18,6 +20,7 @@ pub enum SecretError {
 }
 
 /// A backend that can resolve named secret items to their values.
+#[async_trait]
 pub trait SecretProvider: Send + Sync {
     /// The error type returned by provider operations.
     type Error: std::error::Error + Send + Sync + 'static;
@@ -26,10 +29,10 @@ pub trait SecretProvider: Send + Sync {
     fn name(&self) -> &'static str;
 
     /// Verify the provider is usable (vault unlocked, CLI installed, etc.).
-    fn check_available(&self) -> Result<(), Self::Error>;
+    async fn check_available(&self) -> Result<(), Self::Error>;
 
     /// Resolve a named item to its secret value.
-    fn resolve(&self, item: &str) -> Result<String, Self::Error>;
+    async fn resolve(&self, item: &str) -> Result<String, Self::Error>;
 }
 
 /// Available secret providers.

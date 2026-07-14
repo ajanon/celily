@@ -1,10 +1,11 @@
-use std::process::Command;
+use async_trait::async_trait;
 
 use super::{SecretError, SecretProvider};
-use crate::command::CommandExt;
+use crate::command::AsyncCommandExt;
 
 pub(crate) struct RbwProvider;
 
+#[async_trait]
 impl SecretProvider for RbwProvider {
     type Error = SecretError;
 
@@ -12,13 +13,19 @@ impl SecretProvider for RbwProvider {
         "rbw"
     }
 
-    fn check_available(&self) -> Result<(), SecretError> {
-        Command::new("rbw").arg("unlocked").run()?;
+    async fn check_available(&self) -> Result<(), SecretError> {
+        tokio::process::Command::new("rbw")
+            .arg("unlocked")
+            .run()
+            .await?;
         Ok(())
     }
 
-    fn resolve(&self, item: &str) -> Result<String, SecretError> {
-        let output = Command::new("rbw").args(["get", item]).run_output()?;
+    async fn resolve(&self, item: &str) -> Result<String, SecretError> {
+        let output = tokio::process::Command::new("rbw")
+            .args(["get", item])
+            .run_output()
+            .await?;
         Ok(String::from_utf8_lossy(&output.stdout)
             .trim_end()
             .to_string())
