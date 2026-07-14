@@ -2,6 +2,7 @@ mod mitmproxy;
 pub mod params;
 pub mod rule;
 
+use std::collections::HashMap;
 use std::net::IpAddr;
 
 use mitmproxy::MitmProxy;
@@ -22,6 +23,10 @@ pub enum NetworkError {
     /// The mitmproxy failed to start.
     #[error(transparent)]
     Proxy(#[from] MitmProxyError),
+
+    /// A secret could not be resolved.
+    #[error(transparent)]
+    Secret(#[from] SecretError),
 }
 
 /// Wrapper holding the RAII guards for network isolation.
@@ -40,7 +45,7 @@ impl NetworkIsolation {
     /// Full setup. Creates the isolation bridge via the backend,
     /// starts mitmproxy, and returns the isolation guard and the
     /// PEM-encoded CA certificate.
-    pub(crate) fn setup<NB: NetworkBackend>(
+    pub(crate) async fn setup<NB: NetworkBackend>(
         backend: &NB,
         bridge_name: &str,
         params: &CreateBridgeParams,
@@ -52,8 +57,36 @@ impl NetworkIsolation {
             .create_bridge(bridge_name, params)
             .map_err(|e| NetworkError::Backend(Box::new(e)))?;
 
-        let (proxy, ca_cert) =
-            MitmProxy::start(bridge_name, &gateway_ip.to_string(), dns, allow, provider)?;
+        // Resolve auth secrets (each unique name once).
+        let mut auth_secrets: HashMap<String, String> = HashMap::new();
+        for rule in allow {
+            if let NetworkRule::Http {
+                auth: Some(auth), ..
+            } = rule
+                && !auth_secrets.contains_key(&auth.secret)
+            {
+                let p = provider.ok_or_else(|| SecretError::NoProvider {
+                    secret: auth.secret.clone(),
+                })?;
+                let value = p.resolve(&auth.secret)?;
+                auth_secrets.insert(auth.secret.clone(), value);
+            }
+        }
+
+        let gateway_ip_str = gateway_ip.to_string();
+        let bridge_name_owned = bridge_name.to_string();
+        let allow_owned = allow.to_vec();
+        let (proxy, ca_cert) = tokio::task::spawn_blocking(move || {
+            MitmProxy::start(
+                &bridge_name_owned,
+                &gateway_ip_str,
+                dns,
+                &allow_owned,
+                &auth_secrets,
+            )
+        })
+        .await
+        .unwrap()?;
 
         Ok((
             Self {
