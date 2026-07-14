@@ -53,13 +53,13 @@ Prerequisites:
 - [LXD](https://github.com/canonical/lxd) or
   [Incus](https://github.com/lxc/incus)
 - [mitmproxy](https://github.com/mitmproxy/mitmproxy)
-- Nightly Rust
+- Rust (stable)
 
 Optional:
 
 - [rbw](https://github.com/doy/rbw) for secrets
 
-1. Build with nightly Rust
+1. Build
 
    ```bash
    cargo build --release
