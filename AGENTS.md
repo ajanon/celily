@@ -27,9 +27,6 @@ Feel free to rename, restructure, or break things freely.
 
 ## Build
 
-**Nightly Rust is required** (specified in `rust-toolchain.toml`). The project
-uses `#![feature(once_cell_try)]` for `OnceCell::get_or_try_init`.
-
 ```
 cargo check          # fast type/borrow check, no codegen
 cargo build          # debug build
