@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
+use async_trait::async_trait;
+
 use crate::mount::AccessMode;
 
 pub mod lxd;
@@ -68,24 +70,31 @@ pub struct InstanceConfig {
 // ---------------------------------------------------------------------------
 
 /// Manages the lifecycle of an isolated instance.
+#[async_trait]
 pub trait InstanceBackend: Send + Sync {
     /// The error type returned by all operations.
     type Error: std::error::Error + Send + Sync + 'static;
 
     /// Create the instance without starting it.
-    fn create(&self, name: &str, config: &InstanceConfig) -> Result<(), Self::Error>;
+    async fn create(&self, name: &str, config: &InstanceConfig) -> Result<(), Self::Error>;
 
     /// Boot the instance.
-    fn start(&self, name: &str) -> Result<(), Self::Error>;
+    async fn start(&self, name: &str) -> Result<(), Self::Error>;
 
     /// Delete the instance (forcefully).
+    /// Synchronous because it is called from Drop.
     fn delete(&self, name: &str) -> Result<(), Self::Error>;
 
     /// Attach a device to the instance.
-    fn add_device(&self, name: &str, dev_name: &str, device: &Device) -> Result<(), Self::Error>;
+    async fn add_device(
+        &self,
+        name: &str,
+        dev_name: &str,
+        device: &Device,
+    ) -> Result<(), Self::Error>;
 
     /// Override the default NIC to connect to the given bridge.
-    fn attach_to_bridge(
+    async fn attach_to_bridge(
         &self,
         name: &str,
         bridge: &str,
@@ -94,10 +103,10 @@ pub trait InstanceBackend: Send + Sync {
     ) -> Result<(), Self::Error>;
 
     /// Set the instance description.
-    fn set_description(&self, name: &str, desc: &str) -> Result<(), Self::Error>;
+    async fn set_description(&self, name: &str, desc: &str) -> Result<(), Self::Error>;
 
     /// Execute a command inside the instance, returning the exit code.
-    fn exec(
+    async fn exec(
         &self,
         name: &str,
         cmd: &[String],
@@ -110,10 +119,10 @@ pub trait InstanceBackend: Send + Sync {
     ) -> Result<i32, Self::Error>;
 
     /// Execute a command inside the instance, capturing stdout.
-    fn exec_stdout(&self, name: &str, cmd: &[&str]) -> Result<String, Self::Error>;
+    async fn exec_stdout(&self, name: &str, cmd: &[&str]) -> Result<String, Self::Error>;
 
     /// Write file content to a path inside the instance.
-    fn write_file(
+    async fn write_file(
         &self,
         name: &str,
         content: &[u8],
@@ -134,13 +143,14 @@ pub trait BridgeGuard: Send + Sync {
 }
 
 /// Manages per-instance network isolation bridges.
+#[async_trait]
 pub trait NetworkBackend: Send + Sync {
     /// The error type returned by all operations.
     type Error: std::error::Error + Send + Sync + 'static;
 
     /// Create an isolated bridge and return a guard that deletes it on drop,
     /// along with the bridge's gateway IP.
-    fn create_bridge(
+    async fn create_bridge(
         &self,
         name: &str,
         params: &CreateBridgeParams,

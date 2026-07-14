@@ -79,26 +79,26 @@ pub(crate) struct NetworkAcl {
 
 impl NetworkAcl {
     /// Create a new, empty network ACL.
-    pub(crate) fn create(
+    pub(crate) async fn create(
         lxd: Arc<LxcBackend>,
         name: &str,
         keep: bool,
     ) -> Result<Self, CommandError> {
         let name = name.to_string();
-        lxd.create_acl(&name)?;
+        lxd.create_acl(&name).await?;
         info!(acl = %name, "created network ACL");
         Ok(Self { name, lxd, keep })
     }
 
     /// Add a single rule to this ACL.
-    pub(crate) fn add_rule(&self, rule: &NetworkAclRule) -> Result<(), CommandError> {
-        self.lxd.add_acl_rule(&self.name, rule)
+    pub(crate) async fn add_rule(&self, rule: &NetworkAclRule) -> Result<(), CommandError> {
+        self.lxd.add_acl_rule(&self.name, rule).await
     }
 
     /// Add multiple rules to this ACL in order.
-    pub(crate) fn add_rules(&self, rules: &[NetworkAclRule]) -> Result<(), CommandError> {
+    pub(crate) async fn add_rules(&self, rules: &[NetworkAclRule]) -> Result<(), CommandError> {
         for rule in rules {
-            self.add_rule(rule)?;
+            self.add_rule(rule).await?;
         }
         Ok(())
     }
