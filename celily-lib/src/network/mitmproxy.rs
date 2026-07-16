@@ -134,7 +134,13 @@ impl MitmProxy {
 
         // --- Config socket ---
         let socket_path = runtime_dir.join(format!("celily/mitmproxy-{bridge_name}.sock"));
-        fs::create_dir_all(socket_path.parent().unwrap())
+        let parent = socket_path.parent().ok_or_else(|| {
+            MitmProxyError::io_ctx(
+                format!("socket path has no parent: {}", socket_path.display()),
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "path has no parent"),
+            )
+        })?;
+        fs::create_dir_all(parent)
             .map_err(|e| MitmProxyError::io_ctx("failed to create celily runtime dir", e))?;
 
         // --- Build config JSON ---
