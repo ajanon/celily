@@ -60,7 +60,7 @@ async fn run() -> anyhow::Result<i32> {
         &cfg.allowed_files,
     )?;
 
-    let distro_kind = cfg.distro.unwrap();
+    let distro_kind = cfg.distro.context("distro is required")?;
 
     info!(
         name = %ctx.name, image = %ctx.image, kind = ?ctx.kind,
