@@ -87,7 +87,8 @@ impl NetworkIsolation {
             )
         })
         .await
-        .unwrap()?;
+        .map_err(|e| MitmProxyError::TaskPanic(e.to_string()))
+        .and_then(|r| r)?;
 
         Ok((
             Self {
