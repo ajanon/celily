@@ -48,6 +48,10 @@ pub enum MitmProxyError {
     /// mitmdump's response did not contain a valid CA certificate.
     #[error("mitmdump did not return a CA certificate: {reason}")]
     CaCert { reason: &'static str },
+
+    /// The spawned mitmproxy task panicked.
+    #[error("mitmproxy task panicked: {0}")]
+    TaskPanic(String),
 }
 
 impl MitmProxyError {
