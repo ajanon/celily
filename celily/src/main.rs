@@ -176,7 +176,10 @@ async fn run() -> anyhow::Result<i32> {
 
     // --- Worktree or direct execution ---
     let code = if ctx.worktree_enabled {
-        let worktree_name = args.worktree.as_ref().unwrap();
+        let worktree_name = args
+            .worktree
+            .as_ref()
+            .context("worktree name is required")?;
         let branch_template = cfg.worktree.branch.as_deref().unwrap_or("celily/{name}");
         let branch_name = branch_template.replace("{name}", &worktree_name);
 
