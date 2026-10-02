@@ -248,8 +248,7 @@ Notable fields (all at top level; no `[common]` / `[run]` nesting):
   `type` discriminator (`"http"` or `"tcp"`). HTTP rules are enforced by
   mitmdump; TCP rules by the bridge egress ACL. See `celily-config.5` for full
   schema.
-- `[worktree]` -- worktree mode configuration (branch, auto_commit, user_name,
-  user_email)
+- `[worktree]` -- worktree mode configuration (branch, user_name, user_email)
 - `pre_run` -- inline script run before the main command
 - `notifications` -- whether to bind-mount the notification proxy socket
   (default: true)

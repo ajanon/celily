@@ -318,17 +318,13 @@ All fields are optional.
 	Template for the worktree branch name. _{name}_ is replaced with
 	the value passed to *--worktree*. Default: *celily/{name}*.
 
-*auto_commit* = _bool_
-	Automatically commit uncommitted changes before container teardown.
-	Default: *true*.
-
 *user_name* = _string_
-	Git user.name for auto-commits. Falls back to the host project's
-	git config when *None*.
+	Git user.name for commits made in worktree mode. Falls back to the
+	host project's git config when *None*.
 
 *user_email* = _string_
-	Git user.email for auto-commits. Falls back to the host project's
-	git config when *None*.
+	Git user.email for commits made in worktree mode. Falls back to the
+	host project's git config when *None*.
 
 # [backend] SECTION
 

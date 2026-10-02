@@ -191,8 +191,6 @@ async fn run() -> anyhow::Result<i32> {
         env_map.insert("GIT_COMMITTER_NAME".into(), git_name);
         env_map.insert("GIT_COMMITTER_EMAIL".into(), git_email);
 
-        let auto_commit = cfg.worktree.auto_commit.unwrap_or(true) && !args.no_auto_commit;
-
         // Pass worktree parameters via environment variables.
         // The script reads these instead of interpolating them into
         // shell source, avoiding injection surface and making the
@@ -202,11 +200,6 @@ async fn run() -> anyhow::Result<i32> {
         env_map.insert(
             "CELILY_WORKTREE_PROJECT".into(),
             ctx.project_dir.to_string_lossy().into_owned(),
-        );
-        env_map.insert("CELILY_WORKTREE_INSTANCE".into(), ctx.name.clone());
-        env_map.insert(
-            "CELILY_WORKTREE_AUTO_COMMIT".into(),
-            if auto_commit { "1".into() } else { "0".into() },
         );
 
         let init_script = include_str!("../share/worktree-init.sh");

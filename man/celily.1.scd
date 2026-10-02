@@ -105,14 +105,11 @@ from *celily-config*(5).
 *-w*, *--worktree* _NAME_
 	Enable worktree mode with the given name. See *WORKTREE MODE* below.
 
-*--no-auto-commit*
-	Disable the safety-net auto-commit in worktree mode.
-
 *--worktree-user-name* _NAME_
-	Override git user.name for worktree auto-commits.
+	Override git user.name for commits made in worktree mode.
 
 *--worktree-user-email* _EMAIL_
-	Override git user.email for worktree auto-commits.
+	Override git user.email for commits made in worktree mode.
 
 *--mount-project*
 	Bind-mount the current working directory (project directory) into the
@@ -172,13 +169,12 @@ unique to the instance, preventing collisions between concurrent
 _[worktree].branch_ (default: *celily/{name}*), with
 _{name}_ replaced by the value passed to *--worktree*.
 
-Before teardown, uncommitted changes are automatically committed as a
-safety net (unless *--no-auto-commit* is passed). The commit
-author and committer are taken from _[worktree].user_name_
+The commit author and committer are taken from _[worktree].user_name_
 and _user_email_, falling back to the host project's git
 config (or the *--worktree-user-name* / *--worktree-user-email*
-CLI overrides). The worktree metadata is cleaned up so the host
-repository's *.git* directory remains untouched.
+CLI overrides). Uncommitted changes are lost at teardown. The
+worktree metadata is cleaned up so the host repository's *.git*
+directory remains untouched.
 
 Worktree mode requires:
 - A git repository with at least one commit.
