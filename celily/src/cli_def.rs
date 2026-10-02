@@ -92,7 +92,7 @@ pub struct Args {
 
     /// Enable worktree mode with the given name. Replaces {name} in
     /// the branch template (default: "celily/{name}").
-    #[arg(short = 'w', long, value_name = "NAME")]
+    #[arg(short = 'w', long, value_name = "NAME", value_parser = parse_worktree_name)]
     pub worktree: Option<String>,
 
     /// Override git user.name for commits made in worktree mode
@@ -129,6 +129,24 @@ pub fn generate_completions(shell: Shell, out: &mut dyn io::Write) {
     let mut cmd = <Args as clap::CommandFactory>::command();
     let name = cmd.get_name().to_owned();
     clap_complete::generate(shell, &mut cmd, &name, out);
+}
+
+/// Parse a `--worktree` name.
+///
+/// The name ends up in a container path, a git remote name, and an `ext::`
+/// URL, so it is restricted to ASCII alphanumerics, `.`, `_` and `-`, and
+/// must not start with `.` or `-`.
+pub fn parse_worktree_name(s: &str) -> Result<String, String> {
+    let valid_char = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-');
+    match s.chars().next() {
+        Some(first) if first != '.' && first != '-' && s.chars().all(valid_char) => {
+            Ok(s.to_owned())
+        },
+        _ => Err(format!(
+            "invalid worktree name '{s}': use ASCII letters, digits, '.', '_' or '-', not \
+             starting with '.' or '-'"
+        )),
+    }
 }
 
 /// Parse a `--mount` argument of the form `SOURCE:TARGET[:readwrite|readonly]`.

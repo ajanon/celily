@@ -5,6 +5,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn worktree_name_accepts_safe_names() {
+        for name in ["foo", "card_selection_fix", "2026-09", "juju4.1", "A-b_c"] {
+            assert_eq!(parse_worktree_name(name).as_deref(), Ok(name));
+        }
+    }
+
+    #[test]
+    fn worktree_name_rejects_unsafe_names() {
+        for name in [
+            "",
+            ".",
+            "..",
+            ".hidden",
+            "-flag",
+            "a/b",
+            "../x",
+            "a b",
+            "a%b",
+            "caf\u{e9}",
+        ] {
+            assert!(parse_worktree_name(name).is_err(), "accepted {name:?}");
+        }
+    }
+
+    #[test]
     fn basic_mount() {
         let m = parse_cli_mount("/src:/dst").unwrap();
         assert_eq!(m.source, PathBuf::from("/src"));

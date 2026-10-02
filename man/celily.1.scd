@@ -104,6 +104,8 @@ from *celily-config*(5).
 
 *-w*, *--worktree* _NAME_
 	Enable worktree mode with the given name. See *WORKTREE MODE* below.
+	_NAME_ may contain ASCII letters, digits, *.*, *\_* and *-*, and must
+	not start with *.* or *-*.
 
 *--worktree-user-name* _NAME_
 	Override git user.name for commits made in worktree mode.
