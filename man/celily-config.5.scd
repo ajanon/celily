@@ -233,8 +233,8 @@ curl -s --unix-socket /tmp/agent.sock http://localhost/refresh
 	When *None* (not set), the default depends on worktree mode:
 	read-only when worktree mode is active, read-write otherwise.
 	Defaults to *false* when not in worktree mode.
-	When worktree mode is active (*--worktree*), the project is
-	always mounted read-only regardless of this setting.
+	When worktree mode is active (*--worktree*), the project, *.git*
+	included, is always mounted read-only regardless of this setting.
 
 *allowed_dirs* = _[paths]_
 	*Required.* Directory paths that may be bind-mounted. A leading *~* expands to
