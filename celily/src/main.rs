@@ -1,6 +1,7 @@
 mod cli;
 mod config;
 mod context;
+mod git_remote;
 mod util;
 mod validate;
 
@@ -18,6 +19,7 @@ use tracing::level_filters::LevelFilter;
 use crate::cli::Args;
 use crate::config::BackendKind;
 use crate::context::{resolve_context, resolve_git_identity};
+use crate::git_remote::SandboxRemote;
 use crate::util::bridge_name;
 
 /// Top-level application logic: load config, resolve context, build
@@ -214,9 +216,24 @@ async fn run() -> anyhow::Result<i32> {
         ];
         full_cmd.extend(raw_command);
 
-        running
+        // The worktree lives at $HOME/<name> in the instance (see the
+        // script). Commits reach the host only when the user fetches.
+        let remote = SandboxRemote::new(
+            &branch_name,
+            &ctx.container_home.join(&worktree_name),
+            |cmd| running.exec_argv(cmd, &ctx.container_home),
+        )?;
+        remote.register(&cwd).await?;
+        info!(
+            "fetch the sandbox's commits with: git fetch {}",
+            remote.name()
+        );
+
+        let result = running
             .exec(&full_cmd, &env_map, Some(&ctx.project_dir))
-            .await?
+            .await;
+        remote.unregister(&cwd).await;
+        result?
     } else {
         if ctx.effective_readonly {
             env_map.insert("GIT_OPTIONAL_LOCKS".into(), "0".into());

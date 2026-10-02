@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::path::Path;
 
 use super::{Instance, InstanceError, InstanceGuard};
@@ -59,5 +60,21 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Running<IB>> {
             .map_err(|e| InstanceError::backend("failed to run lxc exec", e))?;
 
         Ok(code)
+    }
+
+    /// Argument vector (program first) that runs `command` inside the
+    /// instance as the exec user, in `cwd`, with only `HOME` set: no proxy
+    /// and no user environment. For handing the instance to another
+    /// program, e.g. git's `ext::` transport.
+    #[must_use]
+    pub fn exec_argv(&self, command: &[String], cwd: &Path) -> Vec<OsString> {
+        self.instance_backend.exec_argv(
+            &self.config.name,
+            command,
+            &[("HOME", self.config.container_home.as_os_str())],
+            cwd,
+            self.config.exec_uid,
+            self.config.exec_gid,
+        )
     }
 }

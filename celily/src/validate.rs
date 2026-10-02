@@ -12,7 +12,7 @@ pub enum ForbiddenError {
 }
 use celily_lib::AsyncCommandExt;
 
-use crate::util::is_under_or_eq;
+use crate::util::{git_config, is_under_or_eq};
 
 /// A path that may not be bind-mounted into the container.
 ///
@@ -297,7 +297,56 @@ pub async fn validate_worktree_preconditions(
         .await
         .with_context(|| format!("invalid worktree branch name '{resolved_branch}'"))?;
 
+    check_ext_transport_allowed(project_dir).await?;
+    warn_if_fetch_fsck_disabled(project_dir).await;
+
     Ok(())
+}
+
+/// The sandbox remote fetches through git's `ext::` transport, which git
+/// refuses by default. Allowing it is the user's decision, not celily's.
+///
+/// Mirrors git's lookup: `protocol.ext.allow`, then `protocol.allow`, then
+/// the built-in default for `ext` (never).
+async fn check_ext_transport_allowed(project_dir: &Path) -> Result<()> {
+    let policy = if let Some(policy) = git_config(project_dir, &["protocol.ext.allow"]).await {
+        Some(policy)
+    } else {
+        git_config(project_dir, &["protocol.allow"]).await
+    }
+    // git compares these values case-insensitively.
+    .map(|policy| policy.to_ascii_lowercase());
+    if matches!(policy.as_deref(), Some("user" | "always")) {
+        return Ok(());
+    }
+    bail!(
+        "worktree mode fetches from the sandbox through git's ext:: transport, which this \
+         repository does not allow (policy: {}).\nAllow it for this repository only with:\n\n    \
+         git -C {} config protocol.ext.allow user\n\nSee WORKTREE MODE in celily(1) for the \
+         trade-off.",
+        policy.as_deref().unwrap_or("never, git's default"),
+        project_dir.display(),
+    );
+}
+
+/// Fetched objects are always hash-checked; `fetch.fsckObjects` adds checks
+/// for malformed objects and dangerous paths. Recommended, not required.
+///
+/// Mirrors git's lookup: `fetch.fsckObjects`, then `transfer.fsckObjects`.
+async fn warn_if_fetch_fsck_disabled(project_dir: &Path) {
+    let fsck =
+        if let Some(fsck) = git_config(project_dir, &["--type=bool", "fetch.fsckObjects"]).await {
+            Some(fsck)
+        } else {
+            git_config(project_dir, &["--type=bool", "transfer.fsckObjects"]).await
+        };
+    if fsck.as_deref() != Some("true") {
+        tracing::warn!(
+            "fetch.fsckObjects is off: objects fetched from the sandbox are hash-checked but not \
+             fsck'd. Recommended: git -C {} config fetch.fsckObjects true",
+            project_dir.display(),
+        );
+    }
 }
 
 #[cfg(test)]
