@@ -95,15 +95,11 @@ pub struct Args {
     #[arg(short = 'w', long, value_name = "NAME")]
     pub worktree: Option<String>,
 
-    /// Disable the safety-net auto-commit for this run
-    #[arg(long)]
-    pub no_auto_commit: bool,
-
-    /// Override git user.name for auto-commits
+    /// Override git user.name for commits made in worktree mode
     #[arg(long, value_name = "NAME")]
     pub worktree_user_name: Option<String>,
 
-    /// Override git user.email for auto-commits
+    /// Override git user.email for commits made in worktree mode
     #[arg(long, value_name = "EMAIL")]
     pub worktree_user_email: Option<String>,
 

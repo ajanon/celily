@@ -14,17 +14,12 @@ pub struct WorktreeConfig {
     /// when `None`.
     pub branch: Option<String>,
 
-    /// Auto-commit uncommitted changes before container teardown.
-    /// Defaults to `true` when `None`.
-    #[serde(default)]
-    pub auto_commit: Option<bool>,
-
-    /// Git user.name for auto-commits. Falls back to the host project's
-    /// git config when `None`.
+    /// Git user.name for commits made in worktree mode. Falls back to the
+    /// host project's git config when `None`.
     pub user_name: Option<String>,
 
-    /// Git user.email for auto-commits. Falls back to the host project's
-    /// git config when `None`.
+    /// Git user.email for commits made in worktree mode. Falls back to the
+    /// host project's git config when `None`.
     pub user_email: Option<String>,
 }
 
@@ -36,7 +31,6 @@ mod tests {
     fn deserialize_empty_section() {
         let cfg: WorktreeConfig = toml::from_str("").unwrap();
         assert_eq!(cfg.branch, None);
-        assert_eq!(cfg.auto_commit, None);
         assert_eq!(cfg.user_name, None);
         assert_eq!(cfg.user_email, None);
     }
@@ -46,14 +40,12 @@ mod tests {
         let cfg: WorktreeConfig = toml::from_str(
             r#"
             branch = "agents/{name}"
-            auto_commit = false
             user_name = "Agent"
             user_email = "agent@example.com"
             "#,
         )
         .unwrap();
         assert_eq!(cfg.branch.as_deref(), Some("agents/{name}"));
-        assert_eq!(cfg.auto_commit, Some(false));
         assert_eq!(cfg.user_name.as_deref(), Some("Agent"));
         assert_eq!(cfg.user_email.as_deref(), Some("agent@example.com"));
     }

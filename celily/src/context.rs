@@ -384,14 +384,13 @@ pub fn resolve_context(
     })
 }
 
-/// Resolve the git identity for worktree auto-commits.
+/// Resolve the git identity for commits made in worktree mode.
 ///
 /// Priority: `--worktree-user-name`/`--worktree-user-email` CLI flags >
-/// `[run.worktree].user_name`/`user_email` config > host project's git
+/// `[worktree].user_name`/`user_email` config > host project's git
 /// config (`git config user.name` / `git config user.email`).
 ///
-/// Returns an error if no identity can be resolved -- the auto-commit
-/// safety net requires a known author.
+/// Returns an error if no identity can be resolved.
 pub async fn resolve_git_identity(
     args: &Args,
     wc: &WorktreeConfig,
@@ -405,8 +404,8 @@ pub async fn resolve_git_identity(
         git_config(project_dir, "user.name").await
     }
     .context(
-        "worktree auto-commit requires user.name; set it in [run.worktree], --worktree-user-name, \
-         or the host git config",
+        "worktree mode requires user.name; set it in [worktree], --worktree-user-name, or the \
+         host git config",
     )?;
 
     let user_email = if let Some(email) = args.worktree_user_email.clone() {
@@ -417,8 +416,8 @@ pub async fn resolve_git_identity(
         git_config(project_dir, "user.email").await
     }
     .context(
-        "worktree auto-commit requires user.email; set it in [run.worktree], \
-         --worktree-user-email, or the host git config",
+        "worktree mode requires user.email; set it in [worktree], --worktree-user-email, or the \
+         host git config",
     )?;
 
     Ok((user_name, user_email))
