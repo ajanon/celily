@@ -160,7 +160,7 @@ The project directory is mounted at the target configured via
 # WORKTREE MODE
 
 When *--worktree* _NAME_ is passed, *celily* mounts the project directory
-read-only, *.git* included (*--no-project-readonly* is ignored in worktree
+read-only, *.git* included (*--no-project-readonly* is rejected in worktree
 mode), and clones it inside the container into _~/NAME_. The clone
 borrows the project's objects read-only (*git clone --shared*), so nothing
 is copied. New commits stay in the clone until you fetch them (see
