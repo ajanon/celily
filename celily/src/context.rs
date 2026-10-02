@@ -3,13 +3,14 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use celily_lib::{AccessMode, AsyncCommandExt, Device, InstanceKind, Mount, NetworkRule};
+use celily_lib::{AccessMode, Device, InstanceKind, Mount, NetworkRule};
 
 use crate::cli::Args;
 use crate::config::{Config, WorktreeConfig};
 use crate::util::{
     expand_container_tilde,
     expand_host_tilde,
+    git_config,
     instance_name,
     is_under_or_eq,
     is_valid_username,
@@ -401,7 +402,7 @@ pub async fn resolve_git_identity(
     } else if let Some(name) = wc.user_name.clone() {
         Some(name)
     } else {
-        git_config(project_dir, "user.name").await
+        git_config(project_dir, &["user.name"]).await
     }
     .context(
         "worktree mode requires user.name; set it in [worktree], --worktree-user-name, or the \
@@ -413,7 +414,7 @@ pub async fn resolve_git_identity(
     } else if let Some(email) = wc.user_email.clone() {
         Some(email)
     } else {
-        git_config(project_dir, "user.email").await
+        git_config(project_dir, &["user.email"]).await
     }
     .context(
         "worktree mode requires user.email; set it in [worktree], --worktree-user-email, or the \
@@ -421,17 +422,4 @@ pub async fn resolve_git_identity(
     )?;
 
     Ok((user_name, user_email))
-}
-
-/// Read a single value from the project's git config on the host.
-/// Returns `None` if the command fails or the value is empty.
-async fn git_config(project_dir: &Path, key: &str) -> Option<String> {
-    let val = tokio::process::Command::new("git")
-        .args(["-C"])
-        .arg(project_dir)
-        .args(["config", key])
-        .run_stdout()
-        .await
-        .ok()?;
-    if val.is_empty() { None } else { Some(val) }
 }
