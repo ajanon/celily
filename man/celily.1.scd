@@ -182,6 +182,66 @@ Worktree mode requires:
 - A git repository with at least one commit.
 - *.git* to be a directory (not a symlink or submodule).
 - No submodules (_.gitmodules_ must not exist).
+- git's *ext::* transport allowed in the repository (see below).
+
+## Fetching commits
+
+For the duration of the run, *celily* adds a git remote to the host
+repository, named after the branch (e.g. *celily/feature-x*). Fetch the
+sandbox's commits whenever you want to review them, from the host:
+
+```
+$ git fetch celily/feature-x
+```
+
+The remote's URL runs *git upload-pack* inside the instance through
+*lxc exec* (or *incus exec*). Only refs and objects cross the boundary: the sandbox
+repository's config and hooks only ever run inside the sandbox, and the
+host's *git fetch* hash-checks every object it receives. The remote is
+fetch-only and updates exactly one ref, the host branch of the same name,
+forcibly (the sandbox may rewrite its history). Tags are not fetched,
+and the remote never prunes, even with *fetch.prune* or *fetch.pruneTags*
+set. It is skipped by *git fetch --all*.
+
+Nothing is fetched automatically. The remote is removed when *celily*
+exits; commits that were not fetched by then are lost with the instance.
+If *celily* is killed, a stale remote may remain; fetching from it fails,
+and the next run with the same name replaces it. A remote of that name
+whose URL is not an *ext::* one is never replaced: the run fails instead.
+
+*git fetch* refuses to update a branch that is checked out in one of the
+host repository's worktrees, including stale entries (see
+*git worktree list*). Run *git worktree prune* to drop entries whose
+directory no longer exists.
+
+## Allowing the ext transport
+
+The remote uses git's *ext::* transport, which runs a local command as
+the other end of a fetch. git refuses it by default, and *celily* will
+not change that for you: worktree mode fails until the repository allows
+it. Allowing it for this repository only, for commands you run yourself:
+
+```
+$ git config protocol.ext.allow user
+```
+
+With *user*, an *ext::* URL runs its command when you fetch, clone or push
+with it in this repository, and git still refuses it when it fetches on
+its own behalf (e.g. submodules). The trade-off: an *ext::* URL in this
+repository's config, or one you paste, runs a command, like a pasted
+shell command would. Whoever can write this repository's config can
+already make git run commands (hooks, *core.fsmonitor*,
+*core.sshCommand*), so this adds little on top. Avoid *always*, which also
+lets submodule URLs, written by whoever authored the commits, run
+commands.
+
+*celily* also warns when *fetch.fsckObjects* (or *transfer.fsckObjects*)
+is off. Objects are hash-checked either way; fsck additionally rejects
+malformed objects and dangerous paths. Recommended:
+
+```
+$ git config fetch.fsckObjects true
+```
 
 # IDMAPS
 
@@ -312,6 +372,12 @@ $ celily -w feature-x -- bash
 Run a command in a worktree:
 ```
 $ celily -w bugfix -- cargo test
+```
+
+Review a worktree's commits from the host, while it runs:
+```
+$ git fetch celily/bugfix
+$ git log main..celily/bugfix
 ```
 
 # SEE ALSO
