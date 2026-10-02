@@ -12,7 +12,6 @@ use crate::util::{
     expand_host_tilde,
     git_config,
     instance_name,
-    is_under_or_eq,
     is_valid_username,
 };
 use crate::validate::{Forbidden, validate_mount_source, validate_proxy_connect};
@@ -304,46 +303,12 @@ pub fn resolve_context(
 
     if worktree_enabled {
         // Project mount is read-only by default; force it explicitly
-        // when worktree mode is active (belt and suspenders).
+        // when worktree mode is active (belt and suspenders). This covers
+        // .git too: never mount it (or any part of it) read-write. The
+        // sandbox could then plant hooks/config that run on the host and
+        // rewrite refs and objects. Commits leave the sandbox through the
+        // host-side fetch remote instead (see git_remote.rs).
         mounts[0].access = AccessMode::ReadOnly;
-        // Overlay .git read-write. Placed second in the mounts list
-        // so LXD applies it after the read-only project mount.
-        //
-        // Validate the .git path to prevent symlink bypass of mount
-        // validation (finding V1).
-        let git_source = cwd.join(".git");
-        let git_canon = git_source
-            .canonicalize()
-            .with_context(|| format!("cannot resolve .git path: {}", git_source.display()))?;
-        for entry in &forbidden {
-            entry
-                .check(&git_canon)
-                .with_context(|| "cannot mount .git overlay")?;
-        }
-        if !is_under_or_eq(&git_canon, home_canon) {
-            bail!(
-                "cannot mount .git overlay: {} is not under {}",
-                git_source.display(),
-                home_canon.display(),
-            );
-        }
-        // Ensure .git is still inside the already-validated project
-        // directory (symlink escape guard).
-        let cwd_canon = &mounts[0].source;
-        if !is_under_or_eq(&git_canon, cwd_canon) {
-            bail!(
-                "cannot mount .git overlay: {} resolves outside the project directory",
-                git_source.display(),
-            );
-        }
-        mounts.insert(
-            1,
-            Mount {
-                source: git_canon,
-                target: project_target.join(".git"),
-                access: AccessMode::ReadWrite,
-            },
-        );
     } else if mount_project && !effective_readonly {
         // User explicitly opted out of read-only for the project mount.
         mounts[0].access = AccessMode::ReadWrite;

@@ -159,24 +159,26 @@ The project directory is mounted at the target configured via
 
 # WORKTREE MODE
 
-When *--worktree* _NAME_ is passed, *celily* creates a git
-worktree inside the container instead of bind-mounting the project directory
-directly. The project directory is always mounted read-only
-(*--no-project-readonly* is ignored in worktree mode),
-with *.git* overlaid read-write so git operations work.
+When *--worktree* _NAME_ is passed, *celily* mounts the project directory
+read-only, *.git* included (*--no-project-readonly* is ignored in worktree
+mode), and clones it inside the container into _~/NAME_. The clone
+borrows the project's objects read-only (*git clone --shared*), so nothing
+is copied. New commits stay in the clone until you fetch them (see
+*Fetching commits*): the sandbox cannot write to the host repository.
 
-The worktree is created in the container home directory under a name
-unique to the instance, preventing collisions between concurrent
-*celily* runs. The branch name is derived from
-_[worktree].branch_ (default: *celily/{name}*), with
-_{name}_ replaced by the value passed to *--worktree*.
+The branch name is derived from _[worktree].branch_ (default:
+*celily/{name}*), with _{name}_ replaced by the value passed to
+*--worktree*. If the branch exists in the host repository, the clone
+starts from it; otherwise it is created from the host checkout's HEAD.
+Inside the sandbox, *git fetch origin* picks up new host commits.
 
 The commit author and committer are taken from _[worktree].user_name_
 and _user_email_, falling back to the host project's git
 config (or the *--worktree-user-name* / *--worktree-user-email*
-CLI overrides). Uncommitted changes are lost at teardown. The
-worktree metadata is cleaned up so the host repository's *.git*
-directory remains untouched.
+CLI overrides). Uncommitted changes are lost at teardown.
+
+The clone depends on the host repository's objects. Do not prune them
+(e.g. *git gc --prune=now* after deleting branches) while a run is active.
 
 Worktree mode requires:
 - A git repository with at least one commit.

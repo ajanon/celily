@@ -2,30 +2,24 @@
 #
 # Worktree initialization script for celily.
 #
+# The project, .git included, is mounted read-only. Clone it into
+# $HOME/<name>, borrowing its objects (--shared) so nothing is copied. New
+# commits stay in the clone; the host fetches them through its own remote.
+#
 #   CELILY_WORKTREE_BRANCH       branch name for the worktree
 #   CELILY_WORKTREE_NAME         worktree directory name (under $HOME)
-#   CELILY_WORKTREE_PROJECT      path to the main project checkout
+#   CELILY_WORKTREE_PROJECT      path to the read-only project checkout
 
 worktree_path="${HOME}/${CELILY_WORKTREE_NAME}"
+project="${CELILY_WORKTREE_PROJECT}"
+branch="${CELILY_WORKTREE_BRANCH}"
 
-cd "${CELILY_WORKTREE_PROJECT}"
-
-if git show-ref --verify --quiet "refs/heads/${CELILY_WORKTREE_BRANCH}"; then
-    git worktree add "${worktree_path}" "${CELILY_WORKTREE_BRANCH}"
+if git -C "${project}" show-ref --verify --quiet "refs/heads/${branch}"; then
+    git clone --quiet --shared --branch "${branch}" "${project}" "${worktree_path}"
 else
-    git worktree add "${worktree_path}" -b "${CELILY_WORKTREE_BRANCH}" HEAD
+    git clone --quiet --shared "${project}" "${worktree_path}"
+    git -C "${worktree_path}" switch --quiet --create "${branch}"
 fi
 
 cd "${worktree_path}"
-
-(
-    "$@"
-)
-rc=$?
-
-# Remove worktree metadata so the main project's .git is clean.
-# The branch and all commits survive.
-cd "${CELILY_WORKTREE_PROJECT}"
-git worktree remove --force "${worktree_path}"
-
-exit "${rc}"
+exec "$@"

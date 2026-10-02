@@ -174,6 +174,17 @@ If you add a new forbidden path, decide whether it should be `Forbidden::exact`
 or `Forbidden::under`, and update both `resolve_context` (where the list is
 built) and the man pages.
 
+**Worktree mode**: the project, `.git` included, is mounted read-only. The init
+script (`celily/share/worktree-init.sh`) clones it with `--shared` into
+`$HOME/<name>` inside the instance. Commits reach the host only when the user
+runs `git fetch <branch>`: `celily/src/git_remote.rs` registers a host remote
+for the run whose `ext::` URL runs `git upload-pack` inside the instance (via
+`InstanceBackend::exec_argv`), with a host-written refspec and `--no-tags`.
+Never mount `.git` or any part of it read-write: the sandbox could plant
+hooks/config that run on the host, and rewrite refs and objects. Never fetch
+from a sandbox path visible on the host either: upload-pack would then run on
+the host against the sandbox's config.
+
 **Shared library changes**: if you add a public type to `celily-lib`, re-export
 it from `lib.rs`. Keep each concern in its own module -- don't grow `lib.rs`
 itself.

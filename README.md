@@ -32,9 +32,10 @@ required (for configuration, additional projects, etc).
 
 #### Worktree mode
 
-In a git repository, `celily -w <name>` creates a git worktree inside the
-container. `.git` is overlaid on the current directory read-write. Review its
-commits from the host with `git fetch celily/<name>`; this needs a one-time
+In a git repository, `celily -w <name>` clones the project inside the container,
+on branch `celily/<name>`. The project, `.git` included, is mounted read-only:
+the sandbox cannot write to the host repository. Review its commits from the
+host with `git fetch celily/<name>`; this needs a one-time
 `git config protocol.ext.allow user` in the repository (see `celily(1)`).
 
 ### Backend selection
