@@ -10,6 +10,11 @@
 #   CELILY_WORKTREE_NAME         worktree directory name (under $HOME)
 #   CELILY_WORKTREE_PROJECT      path to the read-only project checkout
 
+# celily runs this through `sh -c`, so the flags on the shebang line do not
+# apply. Without -e, a failed clone would leave the command running in the
+# read-only project, or on the wrong branch.
+set -eu
+
 worktree_path="${HOME}/${CELILY_WORKTREE_NAME}"
 project="${CELILY_WORKTREE_PROJECT}"
 branch="${CELILY_WORKTREE_BRANCH}"
