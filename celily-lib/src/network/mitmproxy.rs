@@ -304,7 +304,7 @@ impl MitmProxy {
         config_json: &str,
         log_path: &Path,
     ) -> Result<String, MitmProxyError> {
-        // --- Accept connection (mitmdump connected via CELILY_CONFIG_SOCKET) ---
+        // Accept connection (mitmdump connected via CELILY_CONFIG_SOCKET)
         let deadline = Instant::now() + SOCKET_TIMEOUT;
         let (mut stream, _addr) = loop {
             match listener.accept() {

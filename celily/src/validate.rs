@@ -559,8 +559,8 @@ mod tests {
             .is_ok()
         );
 
-        // ~/.local/share/applications is NOT blocked - ~/.local/share is Exact-blocked
-        // but children (other than keyrings/) are fine
+        // ~/.local/share/applications is NOT blocked - ~/.local/share is
+        // Exact-blocked but children (other than keyrings/) are fine
         assert!(
             validate_mount_source(
                 &local_share_apps_dir,
