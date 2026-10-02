@@ -1,6 +1,7 @@
 //! Mock implementations of the backend traits for testing.
 
 use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::net::IpAddr;
 use std::path::Path;
 use std::sync::Mutex;
@@ -132,6 +133,22 @@ impl super::InstanceBackend for MockInstanceBackend {
                 name: name.to_string(),
             });
         Ok("running".to_string())
+    }
+
+    fn exec_argv(
+        &self,
+        name: &str,
+        cmd: &[String],
+        _env: &[(&str, &OsStr)],
+        _cwd: &Path,
+        _uid: u32,
+        _gid: u32,
+    ) -> Vec<OsString> {
+        ["mock-exec", name, "--"]
+            .into_iter()
+            .chain(cmd.iter().map(String::as_str))
+            .map(OsString::from)
+            .collect()
     }
 
     async fn write_file(

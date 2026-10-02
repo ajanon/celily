@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
 use async_trait::async_trait;
@@ -201,33 +202,24 @@ impl crate::backend::InstanceBackend for LxcBackend {
         home: Option<&Path>,
         proxy_url: Option<&str>,
     ) -> Result<i32, Self::Error> {
-        let mut cmd = self.lxc_project_command_async();
-        cmd.arg("exec")
-            .arg(name)
-            .arg("--user")
-            .arg(uid.to_string())
-            .arg("--group")
-            .arg(gid.to_string())
-            .arg("--cwd")
-            .arg(cwd);
-
-        for (k, v) in env {
-            cmd.arg("--env").arg(format!("{k}={v}"));
-        }
+        let mut env_pairs: Vec<(&str, &OsStr)> = env
+            .iter()
+            .map(|(k, v)| (k.as_str(), OsStr::new(v)))
+            .collect();
         if let Some(h) = home {
-            let mut home_env = std::ffi::OsString::from("HOME=");
-            home_env.push(h);
-            cmd.arg("--env").arg(home_env);
+            env_pairs.push(("HOME", h.as_os_str()));
         }
         if let Some(proxy) = proxy_url {
-            cmd.arg("--env").arg(format!("HTTP_PROXY={proxy}"));
-            cmd.arg("--env").arg(format!("HTTPS_PROXY={proxy}"));
-            cmd.arg("--env").arg("NO_PROXY=");
+            env_pairs.extend([
+                ("HTTP_PROXY", OsStr::new(proxy)),
+                ("HTTPS_PROXY", OsStr::new(proxy)),
+                ("NO_PROXY", OsStr::new("")),
+            ]);
         }
 
-        cmd.arg("--");
-        cmd.args(command);
-
+        let mut cmd = tokio::process::Command::from(
+            self.exec_command(name, command, &env_pairs, cwd, uid, gid),
+        );
         let status = cmd.status().await?;
         let code = status.code().unwrap_or(1);
         Ok(code)
@@ -238,6 +230,22 @@ impl crate::backend::InstanceBackend for LxcBackend {
         cmd.args(["exec", name, "--"]);
         cmd.args(command);
         cmd.run_stdout().await
+    }
+
+    fn exec_argv(
+        &self,
+        name: &str,
+        cmd: &[String],
+        env: &[(&str, &OsStr)],
+        cwd: &Path,
+        uid: u32,
+        gid: u32,
+    ) -> Vec<OsString> {
+        let command = self.exec_command(name, cmd, env, cwd, uid, gid);
+        std::iter::once(command.get_program())
+            .chain(command.get_args())
+            .map(OsStr::to_os_string)
+            .collect()
     }
 
     async fn write_file(
@@ -293,5 +301,79 @@ impl crate::backend::InstanceBackend for LxcBackend {
             });
         }
         Ok(())
+    }
+}
+
+impl LxcBackend {
+    /// Shared builder behind `exec` and `exec_argv`, so the argv handed to
+    /// other programs is exactly the one celily runs itself.
+    fn exec_command(
+        &self,
+        name: &str,
+        cmd: &[String],
+        env: &[(&str, &OsStr)],
+        cwd: &Path,
+        uid: u32,
+        gid: u32,
+    ) -> std::process::Command {
+        let mut command = self.lxc_project_command();
+        command
+            .arg("exec")
+            .arg(name)
+            .arg("--user")
+            .arg(uid.to_string())
+            .arg("--group")
+            .arg(gid.to_string())
+            .arg("--cwd")
+            .arg(cwd);
+        for (key, value) in env {
+            let mut pair = OsString::from(key);
+            pair.push("=");
+            pair.push(value);
+            command.arg("--env").arg(pair);
+        }
+        command.arg("--").args(cmd);
+        command
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::InstanceBackend;
+
+    #[test]
+    fn exec_argv_matches_lxc_exec_layout() {
+        let mut backend = LxcBackend::incus();
+        backend.project = Some("celily".into());
+        let argv = backend.exec_argv(
+            "inst",
+            &["git".into(), "upload-pack".into()],
+            &[("HOME", OsStr::new("/home/dev")), ("A", OsStr::new("b=c"))],
+            Path::new("/home/dev"),
+            1000,
+            1001,
+        );
+        let expected = [
+            "incus",
+            "--project",
+            "celily",
+            "exec",
+            "inst",
+            "--user",
+            "1000",
+            "--group",
+            "1001",
+            "--cwd",
+            "/home/dev",
+            "--env",
+            "HOME=/home/dev",
+            "--env",
+            "A=b=c",
+            "--",
+            "git",
+            "upload-pack",
+        ];
+        assert_eq!(argv, expected.map(OsString::from));
     }
 }

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
@@ -120,6 +121,22 @@ pub trait InstanceBackend: Send + Sync {
 
     /// Execute a command inside the instance, capturing stdout.
     async fn exec_stdout(&self, name: &str, cmd: &[&str]) -> Result<String, Self::Error>;
+
+    /// Build the argument vector (program first) that runs `cmd` inside the
+    /// instance as `uid:gid` in `cwd`, with `env` applied in order.
+    ///
+    /// This is what [`exec`](Self::exec) runs. It is exposed so the
+    /// invocation can be handed to another program, e.g. git's `ext::`
+    /// transport.
+    fn exec_argv(
+        &self,
+        name: &str,
+        cmd: &[String],
+        env: &[(&str, &OsStr)],
+        cwd: &Path,
+        uid: u32,
+        gid: u32,
+    ) -> Vec<OsString>;
 
     /// Write file content to a path inside the instance.
     async fn write_file(
