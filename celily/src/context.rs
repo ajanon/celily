@@ -49,8 +49,6 @@ pub struct RunContext {
     /// Whether DNS filtering is enabled (forces DNS through proxy with
     /// allowlist enforcement).
     pub network_dns: bool,
-    /// Whether worktree mode is enabled for this run.
-    pub worktree_enabled: bool,
     /// Whether the project directory should be mounted read-only.
     pub effective_readonly: bool,
     /// Enable security.nesting (required for snapd, Docker, etc.).
@@ -377,7 +375,6 @@ pub fn resolve_context(
         instance_uuid,
         network_allow,
         network_dns,
-        worktree_enabled,
         effective_readonly,
         security_nesting,
         secure_boot,
