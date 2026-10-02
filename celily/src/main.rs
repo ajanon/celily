@@ -62,6 +62,18 @@ async fn run() -> anyhow::Result<i32> {
 
     let distro_kind = cfg.distro.context("distro is required")?;
 
+    // Worktree preconditions are checked on the host before anything is
+    // launched, so a misconfigured repository fails fast.
+    let worktree = if let Some(ref worktree_name) = args.worktree {
+        let branch_template = cfg.worktree.branch.as_deref().unwrap_or("celily/{name}");
+        let branch_name = branch_template.replace("{name}", worktree_name);
+        crate::validate::validate_worktree_preconditions(&cwd, &branch_name).await?;
+        let identity = resolve_git_identity(&args, &cfg.worktree, &cwd).await?;
+        Some((worktree_name.clone(), branch_name, identity))
+    } else {
+        None
+    };
+
     info!(
         name = %ctx.name, image = %ctx.image, kind = ?ctx.kind,
         "building instance"
@@ -175,17 +187,7 @@ async fn run() -> anyhow::Result<i32> {
     };
 
     // --- Worktree or direct execution ---
-    let code = if ctx.worktree_enabled {
-        let worktree_name = args
-            .worktree
-            .as_ref()
-            .context("worktree name is required")?;
-        let branch_template = cfg.worktree.branch.as_deref().unwrap_or("celily/{name}");
-        let branch_name = branch_template.replace("{name}", &worktree_name);
-
-        crate::validate::validate_worktree_preconditions(&cwd, &branch_name).await?;
-
-        let (git_name, git_email) = resolve_git_identity(&args, &cfg.worktree, &cwd).await?;
+    let code = if let Some((worktree_name, branch_name, (git_name, git_email))) = worktree {
         env_map.insert("GIT_AUTHOR_NAME".into(), git_name.clone());
         env_map.insert("GIT_AUTHOR_EMAIL".into(), git_email.clone());
         env_map.insert("GIT_COMMITTER_NAME".into(), git_name);
