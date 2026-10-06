@@ -77,7 +77,8 @@ with the following rules:
 *Lists*
 	Lists from the default and profile are concatenated (default first,
 	profile appended). This applies to _mounts_, _proxy_,
-	_network.allow_, _allowed_dirs_, _allowed_files_, and _pass_env_.
+	_network.allow_, _allowed_dirs_, _allowed_files_, _pass_env_, and
+	_pre_run_ (a single script per file, collected into a list).
 
 *Maps*
 	Maps from the default and profile are merged; profile entries with the
@@ -195,6 +196,11 @@ Settings for *celily*(1). All fields are optional.
 	works as well as plain shell. The same environment variables as the main
 	command are set (including proxy vars, _[env]_,
 	_[pass_env]_, and *HOME*).
+
+	Each config file sets at most one script. Profile merging does not
+	replace it: scripts from the default config, parent profiles, and the
+	profile all run, in that order, each as its own executable. The first
+	non-zero exit stops the remaining scripts and aborts the run.
 
 	Use for per-run setup that needs to happen before the command executes:
 	refreshing credentials from a host-mounted socket, running a health

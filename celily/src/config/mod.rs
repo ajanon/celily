@@ -117,17 +117,38 @@ pub struct Config {
     /// worktree mode is active (which always mounts it). Set to `true` to
     /// opt in, `false` to explicitly disable.
     pub mount_project: Option<bool>,
-    /// Inline script run as the container user before the main command
-    /// (or `bash --login`). Shebang-aware: written to a temp file and
-    /// executed, so `#!/usr/bin/env python3` works. The same
-    /// environment variables as the main command are set, plus
-    /// `CELILY_USER`, `CELILY_UID`, `CELILY_GID`, `CELILY_HOME`.
-    /// Empty string or whitespace-only is treated as not set.
-    pub pre_run: Option<String>,
+    /// Inline scripts run as the container user before the main command
+    /// (or `bash --login`). Each config file sets at most one; merging
+    /// appends them, so they run default first, then parent profiles,
+    /// then the profile. The first failure aborts the run.
+    /// Shebang-aware: each is written to a temp file and executed, so
+    /// `#!/usr/bin/env python3` works. The same environment variables as
+    /// the main command are set, plus `CELILY_USER`, `CELILY_UID`,
+    /// `CELILY_GID`, `CELILY_HOME`. Empty string or whitespace-only is
+    /// treated as not set.
+    #[serde(deserialize_with = "deserialize_pre_run")]
+    #[merge(strategy = ::merge::vec::append)]
+    pub pre_run: Vec<String>,
     /// Proxy devices that expose host Unix sockets inside the instance.
     /// Each entry corresponds to an LXD/Incus proxy device.
     #[merge(strategy = ::merge::vec::append)]
     pub proxy: Vec<ProxyDevice>,
+}
+
+/// Deserialize one file's `pre_run` script into the list that profile
+/// merging appends to. Trimmed so a shebang lands on the first byte;
+/// empty scripts are dropped here and never run.
+fn deserialize_pre_run<'de, D>(d: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let script = String::deserialize(d)?;
+    let trimmed = script.trim();
+    if trimmed.is_empty() {
+        Ok(Vec::new())
+    } else {
+        Ok(vec![trimmed.to_owned()])
+    }
 }
 
 /// Parsed representation of `profiles.toml`.
@@ -502,6 +523,33 @@ quota = { max_requests = 0, window = "1h" }
         assert_eq!(default.mounts[0].source, PathBuf::from("/src-a"));
         assert_eq!(default.mounts[1].source, PathBuf::from("/src-b"));
         assert_eq!(default.mounts[1].access, AccessMode::ReadWrite);
+    }
+
+    /// `pre_run`: one script per file, trimmed, empty means none.
+    #[test]
+    fn deserialize_pre_run_script() {
+        let config: Config = toml::from_str("pre_run = '''\n#!/bin/sh\ntrue\n'''").unwrap();
+        assert_eq!(config.pre_run, vec!["#!/bin/sh\ntrue".to_owned()]);
+
+        let config: Config = toml::from_str("pre_run = \" \\n \"").unwrap();
+        assert_eq!(config.pre_run, Vec::<String>::new());
+
+        let config: Config = toml::from_str("").unwrap();
+        assert_eq!(config.pre_run, Vec::<String>::new());
+    }
+
+    /// `pre_run` scripts accumulate in merge order instead of replacing.
+    #[test]
+    fn pre_run_appends() {
+        let mut default: Config = toml::from_str("pre_run = 'default'").unwrap();
+        let parent: Config = toml::from_str("pre_run = 'parent'").unwrap();
+        let unset: Config = toml::from_str("").unwrap();
+        let profile: Config = toml::from_str("pre_run = 'profile'").unwrap();
+
+        default.merge(parent);
+        default.merge(unset);
+        default.merge(profile);
+        assert_eq!(default.pre_run, ["default", "parent", "profile"]);
     }
 
     /// HashMap fields: extended, profile keys win on conflict.

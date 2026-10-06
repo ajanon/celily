@@ -122,9 +122,10 @@ permission audit is the verification.
 **Profile merging semantics** (in `Config::merge`):
 
 - Scalar fields: profile wins if present, otherwise default.
-- Lists (`mounts`, `allowed_dirs`, `allowed_files`, `pass_env`): concatenated
-  (default first, profile appended). The `allow` sub-list inside `[network]` is
-  also concatenated.
+- Lists (`mounts`, `allowed_dirs`, `allowed_files`, `pass_env`, `pre_run`):
+  concatenated (default first, profile appended). `pre_run` is a single string
+  per file in TOML, collected into a list; every script runs, in that order. The
+  `allow` sub-list inside `[network]` is also concatenated.
 - Maps (`env`): merged; profile keys override default keys for the same name.
 - Nested tables (`backend`, `limits`, `network`, `worktree`): merged
   field-by-field with scalar override rules.
@@ -260,7 +261,8 @@ Notable fields (all at top level; no `[common]` / `[run]` nesting):
   mitmdump; TCP rules by the bridge egress ACL. See `celily-config.5` for full
   schema.
 - `[worktree]` -- worktree mode configuration (branch, user_name, user_email)
-- `pre_run` -- inline script run before the main command
+- `pre_run` -- inline script run before the main command; one per file, all of
+  them run (default first), first failure aborts
 - `notifications` -- whether to bind-mount the notification proxy socket
   (default: true)
 
