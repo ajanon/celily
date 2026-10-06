@@ -159,25 +159,23 @@ async fn run() -> anyhow::Result<i32> {
     // Proxy env vars are injected by exec() at highest priority.
     let mut env_map = ctx.env_map.clone();
 
-    // Pre-run script.
-    if let Some(ref script) = cfg.pre_run {
-        let trimmed = script.trim();
-        if !trimmed.is_empty() {
-            let wrapper = format!(
-                "cat > /tmp/celily-pre-run <<'CELILY_EOF'\n{trimmed}\nCELILY_EOF\nchmod +x \
-                 /tmp/celily-pre-run && /tmp/celily-pre-run; rc=$?; rm -f /tmp/celily-pre-run; \
-                 exit $rc"
-            );
-            let code = running
-                .exec(
-                    &["sh".into(), "-c".into(), wrapper],
-                    &env_map,
-                    Some(&ctx.project_dir),
-                )
-                .await?;
-            if code != 0 {
-                return Ok(code);
-            }
+    // Pre-run scripts, in merge order (default first). Already trimmed and
+    // non-empty. The first failure aborts the run.
+    for script in &cfg.pre_run {
+        let wrapper = format!(
+            "cat > /tmp/celily-pre-run <<'CELILY_EOF'\n{script}\nCELILY_EOF\nchmod +x \
+             /tmp/celily-pre-run && /tmp/celily-pre-run; rc=$?; rm -f /tmp/celily-pre-run; exit \
+             $rc"
+        );
+        let code = running
+            .exec(
+                &["sh".into(), "-c".into(), wrapper],
+                &env_map,
+                Some(&ctx.project_dir),
+            )
+            .await?;
+        if code != 0 {
+            return Ok(code);
         }
     }
 
