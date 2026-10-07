@@ -295,10 +295,10 @@ an egress ACL that blocks all TCP traffic except connections to a
 per-instance mitmproxy. The mitmproxy enforces an allowlist of
 permitted hosts and optional path prefixes, and injects authentication
 headers where configured (see _auth_ in *celily-config*(5)).
-*HTTP_PROXY* and *HTTPS_PROXY* are forcibly injected so that
-proxy-aware tools work transparently. Tools that ignore the proxy
-environment variables simply cannot reach the internet on ports 80 or
-443 -- the bridge ACL drops their packets.
+*HTTP_PROXY*, *HTTPS_PROXY*, *NODE_USE_ENV_PROXY* and *NODE_USE_SYSTEM_CA*
+are forcibly injected so that proxy-aware tools work transparently.
+Tools that ignore the proxy environment variables simply cannot reach
+the internet on ports 80 or 443 -- the bridge ACL drops their packets.
 
 If more granular network containment is needed, configure it via
 LXD/Incus profiles or a custom bridge at the host level.

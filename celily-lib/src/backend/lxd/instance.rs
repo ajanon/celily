@@ -214,6 +214,8 @@ impl crate::backend::InstanceBackend for LxcBackend {
                 ("HTTP_PROXY", OsStr::new(proxy)),
                 ("HTTPS_PROXY", OsStr::new(proxy)),
                 ("NO_PROXY", OsStr::new("")),
+                ("NODE_USE_ENV_PROXY", OsStr::new("1")),
+                ("NODE_USE_SYSTEM_CA", OsStr::new("1")),
             ]);
         }
 
