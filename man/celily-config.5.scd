@@ -445,9 +445,10 @@ process that enforces the allowlist.
 	bridge gateway IP. It provides an HTTP forward proxy and a DNS
 	server. The container uses it as an explicit HTTP forward proxy
 	and as its primary DNS resolver.
-- *HTTP_PROXY*, *HTTPS_PROXY*, and *NO_PROXY* environment
-	variables are forcibly injected into the container at the highest
-	priority -- they cannot be overridden by *--env* or config.
+- *HTTP_PROXY*, *HTTPS_PROXY*, *NO_PROXY*, *NODE_USE_ENV_PROXY* and
+	*NODE_USE_SYSTEM_CA* environment variables are forcibly injected
+	into the container at the highest priority -- they cannot be
+	overridden by *--env* or config.
 - A per-instance CA certificate is pushed into the container so
 	TLS-terminated connections through the proxy are trusted.
 
