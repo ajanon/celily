@@ -48,8 +48,6 @@ pub struct RunContext {
     /// Whether DNS filtering is enabled (forces DNS through proxy with
     /// allowlist enforcement).
     pub network_dns: bool,
-    /// Whether the project directory should be mounted read-only.
-    pub effective_readonly: bool,
     /// Enable security.nesting (required for snapd, Docker, etc.).
     pub security_nesting: bool,
     /// Disable UEFI secure boot for VMs. Ignored on containers.
@@ -333,7 +331,6 @@ pub fn resolve_context(
         instance_uuid,
         network_allow,
         network_dns,
-        effective_readonly: !project_readwrite,
         security_nesting,
         secure_boot,
         extra_devices,
@@ -413,7 +410,6 @@ mod tests {
                 &[],
             )
             .unwrap();
-            assert_eq!(ctx.effective_readonly, ctx.mounts[0].access == ReadOnly);
             ctx.mounts[0].access
         };
         assert_eq!(access(&[], None), ReadOnly);
