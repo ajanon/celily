@@ -54,7 +54,7 @@ pub enum NetworkRule {
         /// Plain key-value pairs (no secret resolution).
         headers: HashMap<String, String>,
         /// Allowed HTTP methods (e.g. `["GET", "HEAD"]`).
-        /// When absent, all methods are allowed.
+        /// When absent, only `GET` and `HEAD` are allowed.
         /// When present, only listed methods match the rule.
         methods: Option<Vec<String>>,
         /// Optional request quota tied to this allow rule.
