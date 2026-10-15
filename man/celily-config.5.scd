@@ -234,13 +234,10 @@ curl -s --unix-socket /tmp/agent.sock http://localhost/refresh
 	Set to *false* to explicitly disable (though worktree mode still
 	overrides).
 
-*project_readonly* = _bool_
-	When *true*, the project directory is mounted read-only.
-	When *None* (not set), the default depends on worktree mode:
-	read-only when worktree mode is active, read-write otherwise.
-	Defaults to *false* when not in worktree mode.
-	When worktree mode is active (*--worktree*), the project, *.git*
-	included, is always mounted read-only regardless of this setting.
+*project_readwrite* = _bool_
+	When *true*, the project directory is mounted read-write, *.git*
+	included (see *Read-write mounts* in *celily*(1)). Default: *false*.
+	Ignored in worktree mode, which always mounts it read-only.
 
 *allowed_dirs* = _[paths]_
 	*Required.* Directory paths that may be bind-mounted. A leading *~* expands to

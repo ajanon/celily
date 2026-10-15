@@ -114,13 +114,13 @@ pub struct Args {
     #[arg(long, conflicts_with = "mount_project", conflicts_with = "worktree")]
     pub no_mount_project: bool,
 
-    /// Mount the project directory read-only for this invocation
-    #[arg(long)]
-    pub project_readonly: bool,
+    /// Mount the project directory read-write, .git included
+    #[arg(long, conflicts_with = "worktree")]
+    pub project_readwrite: bool,
 
-    /// Explicitly disable read-only project mount (overrides config)
-    #[arg(long, conflicts_with = "project_readonly", conflicts_with = "worktree")]
-    pub no_project_readonly: bool,
+    /// Mount the project directory read-only (overrides config)
+    #[arg(long, conflicts_with = "project_readwrite")]
+    pub no_project_readwrite: bool,
 }
 
 /// Generate shell completions and write them to `out`.

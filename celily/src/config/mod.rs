@@ -102,11 +102,9 @@ pub struct Config {
     /// dedicated bridge with an egress ACL and a per-instance mitmproxy.
     #[merge(strategy = Merge::merge)]
     pub network: NetworkConfig,
-    /// Mount the project directory read-only. When `None`, the effective
-    /// default depends on worktree mode: `true` when worktree is enabled,
-    /// `false` otherwise. `Some(true)` or `Some(false)` overrides the
-    /// default regardless of worktree mode.
-    pub project_readonly: Option<bool>,
+    /// Mount the project directory read-write, `.git` included. Ignored in
+    /// worktree mode.
+    pub project_readwrite: Option<bool>,
     /// Worktree configuration. Worktree mode is activated by passing
     /// `--worktree NAME` on the CLI; this section configures its
     /// behaviour. See `celily`(1) for details.

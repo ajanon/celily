@@ -240,12 +240,12 @@ Notable fields (all at top level; no `[common]` / `[run]` nesting):
   on containers
 - `mount_project` -- whether to bind-mount the current directory into the
   container (default: not mounted; worktree mode always mounts)
-- `project_readonly` -- whether the project mount is read-only (default:
-  `false`, forced `true` in worktree mode)
+- `project_readwrite` -- whether the project mount is read-write, `.git`
+  included (default: `false`, ignored in worktree mode)
 - `project_target` -- target path inside the container for the project
   bind-mount (default: `~/project`)
 - `[[mounts]]` -- bind mounts added to every container (source/target paths are
-  tilde-expanded; `readonly` is optional, default false)
+  tilde-expanded; `access` is optional: `"readonly"` (default) or `"readwrite"`)
 - `env` -- static environment variables; lowest priority
 - `pass_env` -- host env var names to forward; overrides `env` for same key
 - `secret_provider` -- name of the active secret provider (currently only

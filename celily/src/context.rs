@@ -148,6 +148,12 @@ pub fn resolve_context(
         || args.mount_project
         || (!args.no_mount_project && cfg.mount_project.unwrap_or(false));
 
+    // Worktree mode never mounts .git read-write: the sandbox could plant
+    // hooks/config that run on the host. Commits leave via git_remote.rs.
+    let project_readwrite = !worktree_enabled
+        && (args.project_readwrite
+            || (!args.no_project_readwrite && cfg.project_readwrite.unwrap_or(false)));
+
     let effective_cwd = if mount_project {
         project_target.clone()
     } else {
@@ -159,7 +165,11 @@ pub fn resolve_context(
         mounts.push(Mount {
             source: cwd.to_path_buf(),
             target: project_target.clone(),
-            access: AccessMode::ReadOnly,
+            access: if project_readwrite {
+                AccessMode::ReadWrite
+            } else {
+                AccessMode::ReadOnly
+            },
         });
     }
 
@@ -297,23 +307,6 @@ pub fn resolve_context(
         });
     }
 
-    let effective_readonly = worktree_enabled
-        || args.project_readonly
-        || (!args.no_project_readonly && cfg.project_readonly.unwrap_or(false));
-
-    if worktree_enabled {
-        // Project mount is read-only by default; force it explicitly
-        // when worktree mode is active (belt and suspenders). This covers
-        // .git too: never mount it (or any part of it) read-write. The
-        // sandbox could then plant hooks/config that run on the host and
-        // rewrite refs and objects. Commits leave the sandbox through the
-        // host-side fetch remote instead (see git_remote.rs).
-        mounts[0].access = AccessMode::ReadOnly;
-    } else if mount_project && !effective_readonly {
-        // User explicitly opted out of read-only for the project mount.
-        mounts[0].access = AccessMode::ReadWrite;
-    }
-
     Ok(RunContext {
         image,
         kind,
@@ -340,7 +333,7 @@ pub fn resolve_context(
         instance_uuid,
         network_allow,
         network_dns,
-        effective_readonly,
+        effective_readonly: !project_readwrite,
         security_nesting,
         secure_boot,
         extra_devices,
@@ -384,4 +377,50 @@ pub async fn resolve_git_identity(
     )?;
 
     Ok((user_name, user_email))
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::*;
+
+    /// Read-only by default, and always in worktree mode.
+    #[test]
+    fn project_mount_access() {
+        use AccessMode::{ReadOnly, ReadWrite};
+
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path().canonicalize().unwrap();
+        let (project, config_dir) = (home.join("project"), home.join(".config"));
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(&config_dir).unwrap();
+        let access = |cli: &[&str], readwrite: Option<bool>| {
+            let args =
+                Args::try_parse_from([&["celily", "--mount-project"], cli].concat()).unwrap();
+            let cfg = Config {
+                project_readwrite: readwrite,
+                ..Config::default()
+            };
+            let ctx = resolve_context(
+                &args,
+                &cfg,
+                &project,
+                &home,
+                &home,
+                &config_dir,
+                std::slice::from_ref(&project),
+                &[],
+            )
+            .unwrap();
+            assert_eq!(ctx.effective_readonly, ctx.mounts[0].access == ReadOnly);
+            ctx.mounts[0].access
+        };
+        assert_eq!(access(&[], None), ReadOnly);
+        assert_eq!(access(&[], Some(false)), ReadOnly);
+        assert_eq!(access(&[], Some(true)), ReadWrite);
+        assert_eq!(access(&["--project-readwrite"], None), ReadWrite);
+        assert_eq!(access(&["--no-project-readwrite"], Some(true)), ReadOnly);
+        assert_eq!(access(&["-w", "foo"], Some(true)), ReadOnly);
+    }
 }
