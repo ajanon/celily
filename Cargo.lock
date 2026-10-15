@@ -387,7 +387,6 @@ dependencies = [
  "merge",
  "nix",
  "serde",
- "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
