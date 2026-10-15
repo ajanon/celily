@@ -582,16 +582,16 @@ quota = { max_requests = 0, window = "1h" }
         assert_eq!(default.container_gid, Some(1000));
     }
 
-    /// Option<bool> with serde defaults: profile `false` wins.
+    /// Option<bool> defaulting to true: profile `false` wins.
     #[test]
     fn option_bool_false_wins() {
         let mut default = Config::default();
-        default.network.dns = Some(true);
+        default.secure_boot = Some(true);
         let mut profile = Config::default();
-        profile.network.dns = Some(false);
+        profile.secure_boot = Some(false);
 
         default.merge(profile);
-        assert_eq!(default.network.dns, Some(false));
+        assert_eq!(default.secure_boot, Some(false));
     }
 
     /// Nested BackendConfig: profile fields inside it win.

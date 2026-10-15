@@ -158,8 +158,7 @@ pub(crate) fn rule_to_cli_args(rule: &NetworkAclRule) -> Vec<String> {
 ///
 /// Returns:
 /// - A TCP allow rule to the gateway on the proxy port (HTTP proxy).
-/// - DNS UDP and TCP allow rules (restricted to the gateway when `dns` is
-///   `true`, unrestricted otherwise).
+/// - DNS UDP and TCP allow rules to the gateway (port 53).
 /// - One TCP allow rule per entry in `allow_tcp`.
 pub(crate) fn build_rules_from_params(
     params: &crate::backend::CreateBridgeParams,
@@ -176,23 +175,23 @@ pub(crate) fn build_rules_from_params(
             source_port: None,
             destination_port: Some(params.proxy_port.to_string()),
         },
-        // DNS UDP -- restricted to gateway when filtering is enabled.
+        // DNS UDP to the gateway's dnsmasq, which forwards to the DNS proxy.
         NetworkAclRule {
             direction: Direction::Egress,
             action: Action::Allow,
             protocol: Some(Protocol::Udp),
             source: None,
-            destination: params.dns.then(|| gateway_ip.to_string()),
+            destination: Some(gateway_ip.to_string()),
             source_port: None,
             destination_port: Some("53".to_string()),
         },
-        // DNS TCP -- same restriction logic.
+        // DNS TCP -- same.
         NetworkAclRule {
             direction: Direction::Egress,
             action: Action::Allow,
             protocol: Some(Protocol::Tcp),
             source: None,
-            destination: params.dns.then(|| gateway_ip.to_string()),
+            destination: Some(gateway_ip.to_string()),
             source_port: None,
             destination_port: Some("53".to_string()),
         },

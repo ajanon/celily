@@ -105,7 +105,6 @@ async fn run() -> anyhow::Result<i32> {
 
     let network = NetworkParams::builder()
         .allow(ctx.network_allow.clone())
-        .dns(ctx.network_dns)
         .build();
 
     let bridge = bridge_name(&ctx.image, &ctx.instance_uuid);
