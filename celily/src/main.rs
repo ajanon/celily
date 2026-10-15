@@ -233,9 +233,6 @@ async fn run() -> anyhow::Result<i32> {
         remote.unregister(&cwd).await;
         result?
     } else {
-        if ctx.effective_readonly {
-            env_map.insert("GIT_OPTIONAL_LOCKS".into(), "0".into());
-        }
         running
             .exec(&raw_command, &env_map, Some(&ctx.project_dir))
             .await?
