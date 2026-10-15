@@ -408,6 +408,7 @@ dependencies = [
  "http",
  "nix",
  "proxyapi",
+ "rustls",
  "serde",
  "serde_json",
  "strum",

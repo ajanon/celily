@@ -2,6 +2,7 @@ mod dns_handler;
 mod handler;
 mod mitmproxy;
 pub mod params;
+mod proxelar;
 pub mod rule;
 
 use std::collections::HashMap;
