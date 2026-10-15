@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::time::Duration;
 
-use tracing::info;
+use tracing::{debug, info};
 
 use super::{Instance, InstanceError, InstanceGuard, Running};
 use crate::backend::{InstanceBackend, NetworkBackend};
@@ -40,7 +40,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Initialized<IB>> 
             .map_err(|e| InstanceError::backend("failed to start instance", e))?;
 
         let mut ready = false;
-        for _ in 0..60 {
+        for attempt in 0..60 {
             match self
                 .instance_backend
                 .exec_stdout(&self.config.name, &["systemctl", "is-system-running"])
@@ -50,7 +50,18 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Initialized<IB>> 
                     ready = true;
                     break;
                 },
-                _ => {},
+                Ok(out) => debug!(
+                    instance = %self.config.name,
+                    attempt,
+                    state = out.trim(),
+                    "system not running yet",
+                ),
+                Err(e) => debug!(
+                    instance = %self.config.name,
+                    attempt,
+                    error = %e,
+                    "systemctl is-system-running failed",
+                ),
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
