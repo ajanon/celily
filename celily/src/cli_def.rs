@@ -90,8 +90,7 @@ pub struct Args {
     #[arg(last = true, allow_hyphen_values = true)]
     pub cmd_args: Vec<String>,
 
-    /// Enable worktree mode with the given name. Replaces {name} in
-    /// the branch template (default: "celily/{name}").
+    /// Enable worktree mode with the given name, on branch celily/NAME
     #[arg(short = 'w', long, value_name = "NAME", value_parser = parse_worktree_name)]
     pub worktree: Option<String>,
 

@@ -180,14 +180,16 @@ script (`celily/share/worktree-init.sh`) clones it with `--shared` into
 `$HOME/<name>` inside the instance. Commits reach the host only when the user
 runs `git fetch <branch>`: `celily/src/git_remote.rs` registers a host remote
 for the run whose `ext::` URL runs `git upload-pack` inside the instance (via
-`InstanceBackend::exec_argv`), with a host-written refspec and `--no-tags`.
-Never mount `.git` or any part of it read-write: the sandbox could plant
-hooks/config that run on the host, and rewrite refs and objects. Never fetch
-from a sandbox path visible on the host either: upload-pack would then run on
-the host against the sandbox's config. `validate.rs` requires the `ext::` policy
-to be `user`, and refuses an `always` a submodule clone would see (system,
-global, command line, `GIT_ALLOW_PROTOCOL`) even under a local `user`: a
-sandbox-authored `.gitmodules` URL would run on the host.
+`InstanceBackend::exec_argv`), with a host-written refspec and `--no-tags`. The
+refspec force-updates `celily/<name>`, so the branch is not configurable: it
+must never be one of the user's branches. Never mount `.git` or any part of it
+read-write: the sandbox could plant hooks/config that run on the host, and
+rewrite refs and objects. Never fetch from a sandbox path visible on the host
+either: upload-pack would then run on the host against the sandbox's config.
+`validate.rs` requires the `ext::` policy to be `user`, and refuses an `always`
+a submodule clone would see (system, global, command line, `GIT_ALLOW_PROTOCOL`)
+even under a local `user`: a sandbox-authored `.gitmodules` URL would run on the
+host.
 
 **Shared library changes**: if you add a public type to `celily-lib`, re-export
 it from `lib.rs`. Keep each concern in its own module -- don't grow `lib.rs`
@@ -263,7 +265,7 @@ Notable fields (all at top level; no `[common]` / `[run]` nesting):
   `type` discriminator (`"http"` or `"tcp"`). HTTP rules are enforced by
   mitmdump; TCP rules by the bridge egress ACL. See `celily-config.5` for full
   schema.
-- `[worktree]` -- worktree mode configuration (branch, user_name, user_email)
+- `[worktree]` -- worktree mode configuration (user_name, user_email)
 - `pre_run` -- inline script run before the main command; one per file, all of
   them run (default first), first failure aborts
 - `notifications` -- whether to bind-mount the notification proxy socket

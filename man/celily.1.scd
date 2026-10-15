@@ -167,10 +167,9 @@ borrows the project's objects read-only (*git clone --shared*), so nothing
 is copied. New commits stay in the clone until you fetch them (see
 *Fetching commits*): the sandbox cannot write to the host repository.
 
-The branch name is derived from _[worktree].branch_ (default:
-*celily/{name}*), with _{name}_ replaced by the value passed to
-*--worktree*. If the branch exists in the host repository, the clone
-starts from it; otherwise it is created from the host checkout's HEAD.
+The branch is *celily/*_NAME_. If it exists in the host repository, the
+clone starts from it; otherwise it is created from the host checkout's
+HEAD.
 Inside the sandbox, *git fetch origin* picks up new host commits.
 
 The commit author and committer are taken from _[worktree].user_name_

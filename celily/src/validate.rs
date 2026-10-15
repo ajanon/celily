@@ -243,14 +243,11 @@ fn build_proxy_forbidden_list(home: &Path, runtime_dir: &Path) -> Vec<Forbidden>
 /// 1. `.git` exists and is a real directory (not symlink, not a regular file).
 /// 2. No `.gitmodules` (submodules are not supported).
 /// 3. The repository has at least one commit (`git rev-parse HEAD`).
-/// 4. The resolved branch name is valid (`git check-ref-format --branch`).
+/// 4. The branch name is valid (`git check-ref-format --branch`).
 /// 5. git's `ext::` transport policy is `user`.
 ///
 /// All checks run on the host before touching LXD.
-pub async fn validate_worktree_preconditions(
-    project_dir: &Path,
-    resolved_branch: &str,
-) -> Result<()> {
+pub async fn validate_worktree_preconditions(project_dir: &Path, branch: &str) -> Result<()> {
     let dotgit = project_dir.join(".git");
 
     if !dotgit.exists() {
@@ -291,12 +288,12 @@ pub async fn validate_worktree_preconditions(
         .await
         .context("worktree mode requires at least one commit in the repository")?;
 
-    // Validate the resolved branch name against git's rules.
+    // Validate the branch name against git's rules.
     tokio::process::Command::new("git")
-        .args(["check-ref-format", "--branch", resolved_branch])
+        .args(["check-ref-format", "--branch", branch])
         .run()
         .await
-        .with_context(|| format!("invalid worktree branch name '{resolved_branch}'"))?;
+        .with_context(|| format!("invalid worktree branch name '{branch}'"))?;
 
     check_ext_transport_allowed(project_dir).await?;
     warn_if_fetch_fsck_disabled(project_dir).await;

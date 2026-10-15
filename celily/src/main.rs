@@ -67,8 +67,8 @@ async fn run() -> anyhow::Result<i32> {
     // Worktree preconditions are checked on the host before anything is
     // launched, so a misconfigured repository fails fast.
     let worktree = if let Some(ref worktree_name) = args.worktree {
-        let branch_template = cfg.worktree.branch.as_deref().unwrap_or("celily/{name}");
-        let branch_name = branch_template.replace("{name}", worktree_name);
+        // A fixed namespace: the sandbox remote force-updates this branch.
+        let branch_name = format!("celily/{worktree_name}");
         crate::validate::validate_worktree_preconditions(&cwd, &branch_name).await?;
         let identity = resolve_git_identity(&args, &cfg.worktree, &cwd).await?;
         Some((worktree_name.clone(), branch_name, identity))
