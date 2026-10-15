@@ -1,3 +1,4 @@
+mod handler;
 mod mitmproxy;
 pub mod params;
 pub mod rule;
