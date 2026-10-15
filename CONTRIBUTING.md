@@ -57,10 +57,10 @@ celily is built on two rules:
 - If you add a new config field, you must add the merge logic in the appropriate
   `merge()` function or the field will silently never take effect from profiles.
 
-- Boolean fields that default to `true` must use `Option<bool>` with a custom
-  serde default. A plain `bool` cannot distinguish "not set" from "set to
-  false", so `default || profile` would block profiles from turning the feature
-  off.
+- Boolean fields that default to `true` must use `Option<bool>`, resolved with
+  `.unwrap_or(true)` where consumed. A plain `bool` cannot distinguish "not set"
+  from "set to false", so `default || profile` would block profiles from turning
+  the feature off.
 
 ## Testing
 

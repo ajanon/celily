@@ -19,12 +19,6 @@ pub struct NetworkParams {
     /// by a rule is blocked.
     #[builder(default)]
     pub allow: Vec<NetworkRule>,
-
-    /// Enable DNS filtering through the proxy. When true, the bridge
-    /// ACL restricts DNS to the gateway only, forcing all DNS traffic
-    /// through the DNS proxy where the allowlist is enforced.
-    #[builder(default = true)]
-    pub dns: bool,
 }
 
 impl NetworkParams {
@@ -49,7 +43,6 @@ impl NetworkParams {
 
         CreateBridgeParams {
             keep,
-            dns: self.dns,
             proxy_port: PROXY_PORT,
             dns_port: DNS_PORT,
             allow_tcp,
@@ -61,46 +54,41 @@ impl NetworkParams {
 mod tests {
     use super::*;
 
-    fn make_params(dns: bool, allow: Vec<NetworkRule>) -> NetworkParams {
-        NetworkParams { allow, dns }
+    fn make_params(allow: Vec<NetworkRule>) -> NetworkParams {
+        NetworkParams { allow }
     }
 
     // ---- to_create_bridge_params ----
 
     #[test]
     fn to_create_bridge_params_minimal() {
-        let params = make_params(true, vec![]);
+        let params = make_params(vec![]);
         let cbp = params.to_create_bridge_params(false);
         assert!(!cbp.keep);
-        assert!(cbp.dns);
         assert_eq!(cbp.proxy_port, PROXY_PORT);
         assert_eq!(cbp.dns_port, DNS_PORT);
         assert!(cbp.allow_tcp.is_empty());
     }
 
     #[test]
-    fn to_create_bridge_params_dns_disabled() {
-        let params = make_params(false, vec![]);
+    fn to_create_bridge_params_keep() {
+        let params = make_params(vec![]);
         let cbp = params.to_create_bridge_params(true);
         assert!(cbp.keep);
-        assert!(!cbp.dns);
     }
 
     #[test]
     fn to_create_bridge_params_with_tcp_rules() {
-        let params = make_params(
-            true,
-            vec![
-                NetworkRule::Tcp {
-                    host: "1.2.3.4".parse().unwrap(),
-                    ports: vec![443, 8443],
-                },
-                NetworkRule::Tcp {
-                    host: "5.6.7.8".parse().unwrap(),
-                    ports: vec![22],
-                },
-            ],
-        );
+        let params = make_params(vec![
+            NetworkRule::Tcp {
+                host: "1.2.3.4".parse().unwrap(),
+                ports: vec![443, 8443],
+            },
+            NetworkRule::Tcp {
+                host: "5.6.7.8".parse().unwrap(),
+                ports: vec![22],
+            },
+        ]);
         let cbp = params.to_create_bridge_params(false);
         assert_eq!(cbp.allow_tcp.len(), 2);
         assert_eq!(
@@ -117,13 +105,10 @@ mod tests {
 
     #[test]
     fn to_create_bridge_params_empty_tcp_ports_skipped() {
-        let params = make_params(
-            true,
-            vec![NetworkRule::Tcp {
-                host: "1.2.3.4".parse().unwrap(),
-                ports: vec![],
-            }],
-        );
+        let params = make_params(vec![NetworkRule::Tcp {
+            host: "1.2.3.4".parse().unwrap(),
+            ports: vec![],
+        }]);
         let cbp = params.to_create_bridge_params(false);
         assert!(cbp.allow_tcp.is_empty());
     }
@@ -139,7 +124,6 @@ mod tests {
                 methods: None,
                 quota: None,
             }],
-            dns: true,
         };
         let cbp = params.to_create_bridge_params(false);
         assert!(cbp.allow_tcp.is_empty());

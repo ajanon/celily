@@ -431,9 +431,7 @@ running inside the *celily* process, that enforce the allowlist.
 
 - A dedicated bridge is created for the instance with an egress ACL
 	that blocks all TCP traffic except connections to the proxy.
-	DNS (UDP+TCP 53) is restricted to the bridge gateway by default
-	(_dns_ defaults to true). Set _dns = false_ to allow DNS to
-	any destination.
+	DNS (UDP+TCP 53) is restricted to the bridge gateway.
 - An HTTP forward proxy and a DNS proxy run inside the *celily*
 	process on the host, bound to the bridge gateway IP. The container
 	uses the first as an explicit HTTP forward proxy and the second,
@@ -452,13 +450,9 @@ a direct connection to the internet on port 80 or 443, the bridge
 ACL drops the packet. The proxy is the only working path to
 HTTP/HTTPS.
 
-*dns* = _bool_ (optional)
-	Enable DNS filtering. When true (default), the bridge ACL restricts DNS
-	to the gateway only and the bridge's dnsmasq is configured to forward
-	all queries to the DNS proxy (on a high port, no privileged port
-	required). The allowlist is enforced on every query (hostname match
-	only; path prefixes are ignored). Set to false to allow DNS to any
-	destination with the proxy DNS listener not filtering.
+DNS is always filtered: only the hosts of HTTP rules resolve (path
+prefixes and methods do not apply); every other name gets NXDOMAIN
+without reaching the host resolver.
 
 *Note:* DNS filtering uses exact hostname matching.
 Subdomains do not inherit rules from their parent domain.

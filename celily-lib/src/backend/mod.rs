@@ -188,11 +188,9 @@ pub struct TcpAllow {
 pub struct CreateBridgeParams {
     /// Whether to keep the bridge after the process exits.
     pub keep: bool,
-    /// Whether to enable DNS filtering through the proxy.
-    pub dns: bool,
     /// The TCP port the HTTP proxy listens on.
     pub proxy_port: u16,
-    /// The port the DNS listener uses.
+    /// The UDP port the DNS proxy listens on.
     pub dns_port: u16,
     /// TCP allow rules for the bridge egress ACL.
     pub allow_tcp: Vec<TcpAllow>,

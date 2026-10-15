@@ -89,16 +89,16 @@ user-specified env vars so they cannot be overridden. `Instance<Running>` holds
 both `InstanceGuard` and `NetworkIsolation` with field declaration order
 guaranteeing the instance is deleted before the bridge is torn down.
 
-**DNS filtering**: when `[network].dns` is true (the default), the bridge ACL
-restricts DNS to the gateway only and the bridge's built-in dnsmasq is
-configured via `raw.dnsmasq` to forward all queries to the DNS proxy on a high
-port (`PROXY_PORT + 1`, currently 34976). dnsmasq is NOT disabled -- it stays
-running and handles port 53 via DHCP. `CelilyDnsHandler`
-(`network/dns_handler.rs`) then allows only the hosts of HTTP rules (exact name,
-no path prefixes); everything else gets NXDOMAIN without reaching the upstream
-resolver, which is the first `nameserver` of the host's `/etc/resolv.conf`. This
-design avoids privileged ports and capabilities entirely. The `raw.dnsmasq`
-config is: `no-resolv\nno-poll\ncache-size=0\nserver=<gateway_ip>#<dns_port>\n`.
+**DNS filtering**: always on, no config toggle. The bridge ACL restricts DNS to
+the gateway only and the bridge's built-in dnsmasq is configured via
+`raw.dnsmasq` to forward all queries to the DNS proxy on a high port
+(`PROXY_PORT + 1`, currently 34976). dnsmasq is NOT disabled -- it stays running
+and handles port 53 via DHCP. `CelilyDnsHandler` (`network/dns_handler.rs`) then
+allows only the hosts of HTTP rules (exact name, no path prefixes); everything
+else gets NXDOMAIN without reaching the upstream resolver, which is the first
+`nameserver` of the host's `/etc/resolv.conf`. This design avoids privileged
+ports and capabilities entirely. The `raw.dnsmasq` config is:
+`no-resolv\nno-poll\ncache-size=0\nserver=<gateway_ip>#<dns_port>\n`.
 
 **Config resolution**: CLI arg > profile config > inherited parent profiles >
 default config > hardcoded default. Applied consistently in both `run()`
@@ -140,13 +140,14 @@ If you add a new config field, add the merge logic in the appropriate
 sub-module's `merge()` function or it will silently never take effect from
 profiles.
 
-**Boolean fields that default to true**: Use `Option<bool>` with a custom serde
-default (e.g. `#[serde(default = "default_dns")]`) and merge with
-`profile_field.or(default_field)`. This lets a profile explicitly set `false` to
-disable something that defaults on. A plain `bool` with `#[serde(default)]`
-can't distinguish "not set" from "set to false", so `default || profile` would
-block profiles from turning the feature off. See `NetworkConfig.dns` for the
-pattern.
+**Boolean fields that default to true**: Use `Option<bool>`, merged with
+`profile_field.or(default_field)`, and resolve the default where it is consumed
+(`.unwrap_or(true)`; see `Config.secure_boot`). This lets a profile explicitly
+set `false` to disable something that defaults on. A plain `bool` with
+`#[serde(default)]` can't distinguish "not set" from "set to false", so
+`default || profile` would block profiles from turning the feature off. A serde
+default of `Some(true)` on a field of a nested table is wrong too: a file that
+has the table but omits the key then sets it, overriding an earlier `false`.
 
 **Config validation flow**: There is no automatic per-file or post-merge
 validation. If you add a validation rule, call it in `Config::load_file` (for
@@ -267,10 +268,10 @@ Notable fields (all at top level; no `[common]` / `[run]` nesting):
 - `[limits]` -- cpu, memory, disk, processes, disk_priority, memory_enforce,
   network_ingress, network_egress (container-only limits warn on VMs but are
   passed through)
-- `[network]` -- network isolation config (allow, dns); `allow` rules use a
-  `type` discriminator (`"http"` or `"tcp"`). HTTP rules are enforced by the
-  in-process proxy; TCP rules by the bridge egress ACL. See `celily-config.5`
-  for full schema.
+- `[network]` -- network isolation config (allow); `allow` rules use a `type`
+  discriminator (`"http"` or `"tcp"`). HTTP rules are enforced by the in-process
+  proxy; TCP rules by the bridge egress ACL. See `celily-config.5` for full
+  schema.
 - `[worktree]` -- worktree mode configuration (user_name, user_email)
 - `pre_run` -- inline script run before the main command; one per file, all of
   them run (default first), first failure aborts

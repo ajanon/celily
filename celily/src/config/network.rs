@@ -19,14 +19,6 @@ pub struct NetworkConfig {
     /// blocked with HTTP 403.
     #[merge(strategy = ::merge::vec::append)]
     pub allow: Vec<ConfigNetworkRule>,
-
-    /// Enable DNS filtering via the DNS proxy.
-    #[serde(default = "default_dns")]
-    pub dns: Option<bool>,
-}
-
-fn default_dns() -> Option<bool> {
-    Some(true)
 }
 
 /// Config-file representation of a single network isolation rule.

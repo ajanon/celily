@@ -117,22 +117,17 @@ impl BridgeGuard for LxdBridgeGuard {}
 // NetworkBackend impl
 // ---------------------------------------------------------------------------
 
-/// Build the dnsmasq configuration for DNS filtering.
-///
-/// When `dns` is `true`, returns a dnsmasq config that disables
-/// upstream resolvers, disables caching, and forwards all queries
-/// to the DNS proxy on the gateway. When `dns` is
-/// `false`, returns `None` (no DNS filtering).
-fn build_dnsmasq_config(dns: bool, gateway_ip: &str, dns_port: u16) -> Option<String> {
-    dns.then(|| {
-        format!(
-            "no-resolv
+/// Build the dnsmasq configuration for DNS filtering: no upstream
+/// resolvers, no caching, every query forwarded to the DNS proxy on the
+/// gateway.
+fn build_dnsmasq_config(gateway_ip: &str, dns_port: u16) -> String {
+    format!(
+        "no-resolv
 no-poll
 cache-size=0
 server={gateway_ip}#{dns_port}
 "
-        )
-    })
+    )
 }
 
 #[async_trait]
@@ -161,17 +156,11 @@ impl NetworkBackend for LxcBackend {
 
         // Add ACL rules and set dnsmasq in parallel. Both are
         // independent -- rules mutate the ACL, dnsmasq mutates the bridge.
-        let dnsmasq_config = build_dnsmasq_config(params.dns, &gateway_str, params.dns_port);
-
-        let acl_future = acl.add_rules(&acl_rules);
-        let dnsmasq_future = async {
-            if let Some(ref config) = dnsmasq_config {
-                bridge.set_raw_dnsmasq(config).await
-            } else {
-                Ok(())
-            }
-        };
-        let (acl_result, dnsmasq_result) = tokio::join!(acl_future, dnsmasq_future);
+        let dnsmasq_config = build_dnsmasq_config(&gateway_str, params.dns_port);
+        let (acl_result, dnsmasq_result) = tokio::join!(
+            acl.add_rules(&acl_rules),
+            bridge.set_raw_dnsmasq(&dnsmasq_config)
+        );
         acl_result?;
         dnsmasq_result?;
 

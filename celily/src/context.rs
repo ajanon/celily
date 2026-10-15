@@ -45,9 +45,6 @@ pub struct RunContext {
     pub instance_uuid: uuid::Uuid,
     /// Network allow rules from config.
     pub network_allow: Vec<NetworkRule>,
-    /// Whether DNS filtering is enabled (forces DNS through proxy with
-    /// allowlist enforcement).
-    pub network_dns: bool,
     /// Enable security.nesting (required for snapd, Docker, etc.).
     pub security_nesting: bool,
     /// Disable UEFI secure boot for VMs. Ignored on containers.
@@ -283,7 +280,6 @@ pub fn resolve_context(
         .cloned()
         .map(|r| r.into_library())
         .collect::<Result<Vec<_>, _>>()?;
-    let network_dns = cfg.network.dns.unwrap_or(true);
     let security_nesting = cfg.security_nesting.unwrap_or(false);
     let secure_boot = cfg.secure_boot.unwrap_or(true);
 
@@ -330,7 +326,6 @@ pub fn resolve_context(
         description,
         instance_uuid,
         network_allow,
-        network_dns,
         security_nesting,
         secure_boot,
         extra_devices,
