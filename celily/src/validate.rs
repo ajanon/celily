@@ -10,7 +10,7 @@ pub enum ForbiddenError {
     #[error("path is under {label} (forbidden)")]
     Subtree { label: &'static str },
 }
-use celily_lib::AsyncCommandExt;
+use celily_lib::{AsyncCommandExt, CommandError};
 
 use crate::util::{git_config, is_under_or_eq};
 
@@ -244,6 +244,7 @@ fn build_proxy_forbidden_list(home: &Path, runtime_dir: &Path) -> Vec<Forbidden>
 /// 2. No `.gitmodules` (submodules are not supported).
 /// 3. The repository has at least one commit (`git rev-parse HEAD`).
 /// 4. The resolved branch name is valid (`git check-ref-format --branch`).
+/// 5. git's `ext::` transport policy is `user`.
 ///
 /// All checks run on the host before touching LXD.
 pub async fn validate_worktree_preconditions(
@@ -303,30 +304,114 @@ pub async fn validate_worktree_preconditions(
     Ok(())
 }
 
-/// The sandbox remote fetches through git's `ext::` transport, which git
-/// refuses by default. Allowing it is the user's decision, not celily's.
-///
-/// Mirrors git's lookup: `protocol.ext.allow`, then `protocol.allow`, then
-/// the built-in default for `ext` (never).
+/// Worktree mode fetches through git's `ext::` transport: require `user`.
+/// `always` would also run `ext::` URLs from fetched commits, such as a
+/// submodule URL. Checked at launch only.
 async fn check_ext_transport_allowed(project_dir: &Path) -> Result<()> {
-    let policy = if let Some(policy) = git_config(project_dir, &["protocol.ext.allow"]).await {
-        Some(policy)
-    } else {
-        git_config(project_dir, &["protocol.allow"]).await
-    }
+    let ext_allow = config_entries(project_dir, "protocol.ext.allow").await?;
+    let allow = config_entries(project_dir, "protocol.allow").await?;
+    // Lossy, not `var`: a non-UTF-8 value must not read as unset.
+    let allow_protocol =
+        std::env::var_os("GIT_ALLOW_PROTOCOL").map(|v| v.to_string_lossy().into_owned());
+    let (policy, source) = ext_policy(&ext_allow, &allow, allow_protocol.as_deref());
     // git compares these values case-insensitively.
-    .map(|policy| policy.to_ascii_lowercase());
-    if matches!(policy.as_deref(), Some("user" | "always")) {
-        return Ok(());
+    match policy.to_ascii_lowercase().as_str() {
+        "user" => Ok(()),
+        "always" => bail!(
+            "git allows its ext:: transport 'always' ({source}). The sandbox could commit a \
+             .gitmodules with an ext:: URL, and `git submodule update --init` would run its \
+             command on this host. Use 'user' instead; see WORKTREE MODE in celily(1)."
+        ),
+        _ => bail!(
+            "worktree mode fetches from the sandbox through git's ext:: transport, which git does \
+             not allow here ({source}). Allow it for this repository with:\n\n    git -C {} \
+             config protocol.ext.allow user\n\nSee WORKTREE MODE in celily(1).",
+            project_dir.display(),
+        ),
     }
-    bail!(
-        "worktree mode fetches from the sandbox through git's ext:: transport, which this \
-         repository does not allow (policy: {}).\nAllow it for this repository only with:\n\n    \
-         git -C {} config protocol.ext.allow user\n\nSee WORKTREE MODE in celily(1) for the \
-         trade-off.",
-        policy.as_deref().unwrap_or("never, git's default"),
-        project_dir.display(),
-    );
+}
+
+/// git's `ext` policy and where it comes from. `GIT_ALLOW_PROTOCOL`
+/// overrides the config. A submodule clone does not read this repository's
+/// config, so a local `user` must not hide an `always` the submodule sees.
+fn ext_policy(
+    ext_allow: &[ConfigEntry],
+    allow: &[ConfigEntry],
+    allow_protocol: Option<&str>,
+) -> (String, String) {
+    if let Some(list) = allow_protocol {
+        let policy = if list.split(':').any(|p| p == "ext") {
+            "always"
+        } else {
+            "never"
+        };
+        return (policy.to_owned(), format!("GIT_ALLOW_PROTOCOL={list}"));
+    }
+    // git's lookup: the last `protocol.ext.allow`, else the last
+    // `protocol.allow`.
+    let lookup = |keep: fn(&str) -> bool| {
+        ext_allow
+            .iter()
+            .rfind(|e| keep(&e.scope))
+            .or_else(|| allow.iter().rfind(|e| keep(&e.scope)))
+    };
+    let entry = lookup(|scope| !matches!(scope, "local" | "worktree"))
+        .filter(|e| e.value.eq_ignore_ascii_case("always"))
+        .or_else(|| lookup(|_| true));
+    match entry {
+        Some(e) => (
+            e.value.clone(),
+            format!("{} = {}, {} scope, {}", e.key, e.value, e.scope, e.origin),
+        ),
+        None => ("never".to_owned(), "never, git's default".to_owned()),
+    }
+}
+
+/// One line of `git config --show-scope --show-origin --get-all`.
+#[derive(Debug, PartialEq)]
+struct ConfigEntry {
+    key: &'static str,
+    scope: String,
+    origin: String,
+    value: String,
+}
+
+/// All values of `key`, in git's read order. Fails closed: any exit code
+/// but 1 (unset) is an error.
+async fn config_entries(dir: &Path, key: &'static str) -> Result<Vec<ConfigEntry>> {
+    let listing = match tokio::process::Command::new("git")
+        // Only `git config` reads GIT_CONFIG, as its sole file: it would
+        // hide the config the rest of git uses.
+        .env_remove("GIT_CONFIG")
+        .arg("-C")
+        .arg(dir)
+        .args(["config", "--show-scope", "--show-origin", "--get-all", key])
+        .run_stdout()
+        .await
+    {
+        Ok(listing) => listing,
+        Err(CommandError::NonZero { code: Some(1), .. }) => return Ok(Vec::new()),
+        Err(e) => return Err(e).with_context(|| format!("cannot read {key} from the git config")),
+    };
+    parse_config_entries(key, &listing)
+}
+
+fn parse_config_entries(key: &'static str, listing: &str) -> Result<Vec<ConfigEntry>> {
+    listing
+        .lines()
+        .map(|line| {
+            let mut fields = line.splitn(3, '\t').map(str::to_owned);
+            match (fields.next(), fields.next(), fields.next()) {
+                (Some(scope), Some(origin), Some(value)) => Ok(ConfigEntry {
+                    key,
+                    scope,
+                    origin,
+                    value,
+                }),
+                _ => bail!("unexpected `git config` output for {key}: {line:?}"),
+            }
+        })
+        .collect()
 }
 
 /// Fetched objects are always hash-checked; `fetch.fsckObjects` adds checks
@@ -599,5 +684,83 @@ mod tests {
 
     fn canonic_path(path: &Path) -> PathBuf {
         path.canonicalize().unwrap()
+    }
+
+    /// Cases checked against a real `git submodule update --init`.
+    #[test]
+    fn ext_policy_follows_git_lookup() {
+        let policy = |ext_allow: &str, allow: &str, allow_protocol: Option<&str>| {
+            let ext_allow = parse_config_entries("protocol.ext.allow", ext_allow).unwrap();
+            let allow = parse_config_entries("protocol.allow", allow).unwrap();
+            ext_policy(&ext_allow, &allow, allow_protocol).0
+        };
+        assert_eq!(policy("", "", None), "never");
+        assert_eq!(policy("global\tg\tuser", "", None), "user");
+        // A local `user` does not shield a submodule (the command ran).
+        assert_eq!(
+            policy("global\tg\talways\nlocal\tl\tuser", "", None),
+            "always"
+        );
+        assert_eq!(
+            policy("local\tl\tuser", "global\tg\talways", None),
+            "always"
+        );
+        // protocol.ext.allow wins over protocol.allow.
+        assert_eq!(policy("global\tg\tuser", "global\tg\talways", None), "user");
+        // Command line config reaches submodules, and is read last.
+        assert_eq!(
+            policy("global\tg\tuser\ncommand\tc\tAlways", "", None),
+            "Always"
+        );
+        // Harmless for submodules, refused anyway.
+        assert_eq!(policy("local\tl\talways", "", None), "always");
+        assert_eq!(policy("local\tl\tuser", "", Some("file:ext")), "always");
+        assert_eq!(policy("local\tl\tuser", "", Some("file:git")), "never");
+    }
+
+    #[test]
+    fn parse_config_entries_fails_closed() {
+        assert!(parse_config_entries("k", "always").is_err());
+        assert!(parse_config_entries("k", "global\talways").is_err());
+    }
+
+    /// Made by hand: no git command writes, even with `GIT_DIR` set.
+    fn hand_made_repo(config: &str) -> tempfile::TempDir {
+        let tmp = tempfile::tempdir().unwrap();
+        let dotgit = tmp.path().join(".git");
+        std::fs::create_dir_all(dotgit.join("objects")).unwrap();
+        std::fs::create_dir_all(dotgit.join("refs")).unwrap();
+        std::fs::write(dotgit.join("HEAD"), "ref: refs/heads/main\n").unwrap();
+        std::fs::write(dotgit.join("config"), config).unwrap();
+        tmp
+    }
+
+    /// Real `git config` output, on keys set nowhere else.
+    #[tokio::test]
+    async fn config_entries_reads_git_config() {
+        let repo = hand_made_repo("[celily-test]\n\tkey = one\n\tkey = two words\n");
+        let entries = config_entries(repo.path(), "celily-test.key")
+            .await
+            .unwrap();
+        let entry = |value: &str| ConfigEntry {
+            key: "celily-test.key",
+            scope: "local".to_owned(),
+            origin: "file:.git/config".to_owned(),
+            value: value.to_owned(),
+        };
+        assert_eq!(entries, [entry("one"), entry("two words")]);
+        let unset = config_entries(repo.path(), "celily-test.unset").await;
+        assert_eq!(unset.unwrap(), []);
+    }
+
+    #[tokio::test]
+    async fn requires_ext_user() {
+        let check = |policy: &str| {
+            let repo = hand_made_repo(&format!("[protocol \"ext\"]\n\tallow = {policy}\n"));
+            async move { check_ext_transport_allowed(repo.path()).await }
+        };
+        assert!(check("never").await.is_err());
+        let err = check("always").await.unwrap_err();
+        assert!(format!("{err:#}").contains("'always'"), "{err:#}");
     }
 }

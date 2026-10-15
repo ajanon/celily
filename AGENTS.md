@@ -184,7 +184,10 @@ for the run whose `ext::` URL runs `git upload-pack` inside the instance (via
 Never mount `.git` or any part of it read-write: the sandbox could plant
 hooks/config that run on the host, and rewrite refs and objects. Never fetch
 from a sandbox path visible on the host either: upload-pack would then run on
-the host against the sandbox's config.
+the host against the sandbox's config. `validate.rs` requires the `ext::` policy
+to be `user`, and refuses an `always` a submodule clone would see (system,
+global, command line, `GIT_ALLOW_PROTOCOL`) even under a local `user`: a
+sandbox-authored `.gitmodules` URL would run on the host.
 
 **Shared library changes**: if you add a public type to `celily-lib`, re-export
 it from `lib.rs`. Keep each concern in its own module -- don't grow `lib.rs`
