@@ -20,7 +20,7 @@ pub struct NetworkConfig {
     #[merge(strategy = ::merge::vec::append)]
     pub allow: Vec<ConfigNetworkRule>,
 
-    /// Enable DNS filtering via the mitmproxy DNS listener.
+    /// Enable DNS filtering via the DNS proxy.
     #[serde(default = "default_dns")]
     pub dns: Option<bool>,
 }

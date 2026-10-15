@@ -99,7 +99,7 @@ pub struct Config {
     /// configured provider is an error.
     pub secret_provider: Option<celily_lib::Providers>,
     /// Network isolation configuration. When enabled, the instance gets a
-    /// dedicated bridge with an egress ACL and a per-instance mitmproxy.
+    /// dedicated bridge with an egress ACL and a per-instance MITM proxy.
     #[merge(strategy = Merge::merge)]
     pub network: NetworkConfig,
     /// Mount the project directory read-write, `.git` included. Ignored in

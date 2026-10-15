@@ -17,7 +17,7 @@ pub struct QuotaConfig {
 
 /// Authentication configuration for header injection on allowed hosts.
 ///
-/// Secrets are resolved from `rbw` at startup and routed to mitmdump
+/// Secrets are resolved from `rbw` at startup and routed to the proxy
 /// only - they never appear as environment variables in the container.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]

@@ -57,7 +57,6 @@ Prerequisites:
 
 - [LXD](https://github.com/canonical/lxd) or
   [Incus](https://github.com/lxc/incus)
-- [mitmproxy](https://github.com/mitmproxy/mitmproxy)
 - Rust (stable)
 
 Optional:
@@ -151,11 +150,12 @@ per-instance MITM proxy.
 - A dedicated bridge is created with an nftables ACL that blocks all TCP egress
   except connections to the proxy (proxy IP available inside the container via
   HTTP_PROXY and HTTPS_PROXY).
-- A per-instance mitmdump process enforces an HTTP host/path allowlist and
-  injects authentication headers where configured.
+- A per-instance proxy, running inside the celily process
+  ([proxelar](https://github.com/emanuele-em/proxelar)), enforces an HTTP
+  host/path allowlist and injects authentication headers where configured.
 - TCP rules allow raw connections to specific IP/port
-- DNS filtering is on by default: mitmproxy only answers for hosts on the same
-  host allowlist as HTTP.
+- DNS filtering is on by default: the proxy only resolves the hosts on the same
+  allowlist as HTTP.
 
 ### Secrets
 

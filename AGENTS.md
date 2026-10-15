@@ -75,11 +75,15 @@ limits applied to VMs. Drop order: `InstanceGuard` is dropped before
 order.
 
 **Network isolation**: network isolation is mandatory -- every instance gets a
-dedicated bridge with an egress ACL and a per-instance mitmdump (spawned
-directly, not via systemd). HTTP rules (`type = "http"`) are enforced by
-mitmdump. TCP rules (`type = "tcp"`) are enforced at the bridge ACL (nftables)
-level and bypass the proxy entirely. The CA cert is pushed into the stopped
-instance before first boot via `lxc file push`, and
+dedicated bridge with an egress ACL and two per-instance proxies running
+in-process on the celily runtime (proxelar's `proxyapi`, see
+`celily-lib/src/network/proxelar.rs`): an HTTP forward proxy and a DNS proxy,
+both bound to the bridge gateway. HTTP rules (`type = "http"`) are enforced by
+`CelilyHandler` (`network/handler.rs`). TCP rules (`type = "tcp"`) are enforced
+at the bridge ACL (nftables) level and bypass the proxy entirely. The CA is
+generated per instance in a 0700 directory under `$XDG_RUNTIME_DIR`, removed
+when `ProxelarGuard` drops. The CA cert is pushed into the instance once systemd
+is up (`lxc file push`, then a trust store rebuild), and
 `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` are injected into `lxc exec` *after*
 user-specified env vars so they cannot be overridden. `Instance<Running>` holds
 both `InstanceGuard` and `NetworkIsolation` with field declaration order
@@ -87,10 +91,12 @@ guaranteeing the instance is deleted before the bridge is torn down.
 
 **DNS filtering**: when `[network].dns` is true (the default), the bridge ACL
 restricts DNS to the gateway only and the bridge's built-in dnsmasq is
-configured via `raw.dnsmasq` to forward all queries to mitmdump's DNS listener
-on a high port (`PROXY_PORT + 1`, currently 34976). dnsmasq is NOT disabled --
-it stays running and handles port 53 via DHCP. mitmdump's addon then enforces
-the same host allowlist for DNS (hostname match only, no path prefixes). This
+configured via `raw.dnsmasq` to forward all queries to the DNS proxy on a high
+port (`PROXY_PORT + 1`, currently 34976). dnsmasq is NOT disabled -- it stays
+running and handles port 53 via DHCP. `CelilyDnsHandler`
+(`network/dns_handler.rs`) then allows only the hosts of HTTP rules (exact name,
+no path prefixes); everything else gets NXDOMAIN without reaching the upstream
+resolver, which is the first `nameserver` of the host's `/etc/resolv.conf`. This
 design avoids privileged ports and capabilities entirely. The `raw.dnsmasq`
 config is: `no-resolv\nno-poll\ncache-size=0\nserver=<gateway_ip>#<dns_port>\n`.
 
@@ -262,9 +268,9 @@ Notable fields (all at top level; no `[common]` / `[run]` nesting):
   network_ingress, network_egress (container-only limits warn on VMs but are
   passed through)
 - `[network]` -- network isolation config (allow, dns); `allow` rules use a
-  `type` discriminator (`"http"` or `"tcp"`). HTTP rules are enforced by
-  mitmdump; TCP rules by the bridge egress ACL. See `celily-config.5` for full
-  schema.
+  `type` discriminator (`"http"` or `"tcp"`). HTTP rules are enforced by the
+  in-process proxy; TCP rules by the bridge egress ACL. See `celily-config.5`
+  for full schema.
 - `[worktree]` -- worktree mode configuration (user_name, user_email)
 - `pre_run` -- inline script run before the main command; one per file, all of
   them run (default first), first failure aborts
@@ -318,10 +324,9 @@ proxy it could bypass isolation.
    Bitwarden).
 1. Secrets are resolved on-demand from `auth.secret` entries in `network.allow`
    rules during `NetworkIsolation::setup()`. Each unique secret name is resolved
-   once via `resolve()`, then the resolved values are embedded into the config
-   JSON sent to mitmdump over the Unix socket.
-1. Secrets never appear as environment variables in the container -- they are
-   routed to mitmdump only, which injects them as HTTP headers on matching
+   once via `resolve()`, then the resolved values are handed to `CelilyHandler`.
+1. Secrets never appear as environment variables in the container -- they stay
+   in the celily process, whose proxy injects them as HTTP headers on matching
    requests.
 
 If you add a new provider, implement the `SecretProvider` trait and add a

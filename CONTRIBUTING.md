@@ -48,7 +48,7 @@ celily is built on two rules:
   allowed (explicit is better than implicit).
 
 - The proxy is the network boundary. The only egress path for HTTP traffic is
-  the per-instance mitmproxy. `HTTP_PROXY` and `HTTPS_PROXY` are injected at the
+  the per-instance proxy. `HTTP_PROXY` and `HTTPS_PROXY` are injected at the
   highest priority and cannot be overridden by user config or `--env`. Tools
   that bypass the proxy hit the bridge ACL and get dropped.
 
