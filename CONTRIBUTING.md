@@ -80,7 +80,7 @@ celily is built on two rules:
 
 ## Formatting
 
-Format Rust code with cargo fmt, and python with black.
+Format Rust code with cargo fmt.
 
 ## Commit messages
 
