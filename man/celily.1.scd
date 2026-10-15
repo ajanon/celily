@@ -122,12 +122,13 @@ from *celily-config*(5).
 	Explicitly disable the project directory mount (overrides config).
 	Conflicts with *--mount-project* and *--worktree*.
 
-*--project-readonly*
-	Mount the project directory read-only.
+*--project-readwrite*
+	Mount the project directory read-write, *.git* included. The default
+	is read-only. Conflicts with *--worktree*. See *Read-write mounts*.
 
-*--no-project-readonly*
-	Explicitly disable the read-only project mount (overrides config).
-	Conflicts with *--project-readonly* and *--worktree*.
+*--no-project-readwrite*
+	Mount the project directory read-only, overriding _project_readwrite_
+	in the config. Conflicts with *--project-readwrite*.
 
 ## Positional arguments
 
@@ -160,8 +161,8 @@ The project directory is mounted at the target configured via
 # WORKTREE MODE
 
 When *--worktree* _NAME_ is passed, *celily* mounts the project directory
-read-only, *.git* included (*--no-project-readonly* is rejected in worktree
-mode), and clones it inside the container into _~/NAME_. The clone
+read-only, *.git* included (*--project-readwrite* is rejected and
+_project_readwrite_ ignored in worktree mode), and clones it inside the container into _~/NAME_. The clone
 borrows the project's objects read-only (*git clone --shared*), so nothing
 is copied. New commits stay in the clone until you fetch them (see
 *Fetching commits*): the sandbox cannot write to the host repository.
@@ -288,6 +289,14 @@ All configuration lives in *$XDG_CONFIG_HOME/celily/*, which is always
 blocked from bind-mounts. There is no per-project config file and no
 environment variable that can redirect the config path.
 
+## Read-write mounts
+
+Mounts are read-only unless set otherwise. In a read-write repository,
+the sandbox can plant hooks and config in *.git* (e.g. *core.fsmonitor*)
+that git runs on the host, and build scripts in the working tree. Mount a
+repository read-write only if you would run the sandbox's code on the
+host yourself; use worktree mode otherwise.
+
 ## Network security
 
 Every *celily* invocation creates a per-instance LXD/Incus bridge with
@@ -311,14 +320,10 @@ and preserved when mitmdump exits with an error.
 
 ## Disk exhaustion
 
-The root disk is constrained by *--disk*, but the project directory
-bind-mount (when enabled via *--mount-project* or
-_mount_project_) does not count against the container's quota.
-A tool that writes large files to a mounted directory can exhaust the
-host's free space. If this is a concern, set the project bind-mount to
-read-only via *--project-readonly*, or configure
-_project_readonly_ in the config. Keep other mounts read-only where
-possible.
+The root disk is constrained by *--disk*, but bind-mounts (the project
+directory, *--mount*, _[[mounts]]_) do not count against the container's
+quota. A tool that writes large files to a read-write mount can exhaust
+the host's free space. Keep mounts read-only (the default) where possible.
 
 # FILES
 
