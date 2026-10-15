@@ -36,7 +36,9 @@ In a git repository, `celily -w <name>` clones the project inside the container,
 on branch `celily/<name>`. The project, `.git` included, is mounted read-only:
 the sandbox cannot write to the host repository. Review its commits from the
 host with `git fetch celily/<name>`; this needs a one-time
-`git config protocol.ext.allow user` in the repository (see `celily(1)`).
+`git config protocol.ext.allow user` in the repository (see `celily(1)`). celily
+refuses to run if git allows `ext::` `always`: a submodule URL in a sandbox
+commit could then run commands on the host.
 
 ### Backend selection
 

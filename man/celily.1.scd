@@ -185,7 +185,7 @@ Worktree mode requires:
 - A git repository with at least one commit.
 - *.git* to be a directory (not a symlink or submodule).
 - No submodules (_.gitmodules_ must not exist).
-- git's *ext::* transport allowed in the repository (see below).
+- git's *ext::* transport allowed as *user* (see below).
 
 ## Fetching commits
 
@@ -234,9 +234,14 @@ its own behalf (e.g. submodules). The trade-off: an *ext::* URL in this
 repository's config, or one you paste, runs a command, like a pasted
 shell command would. Whoever can write this repository's config can
 already make git run commands (hooks, *core.fsmonitor*,
-*core.sshCommand*), so this adds little on top. Avoid *always*, which also
-lets submodule URLs, written by whoever authored the commits, run
-commands.
+*core.sshCommand*), so this adds little on top.
+
+*celily* refuses *always*: the sandbox could commit a _.gitmodules_ with
+an *ext::* URL, and *git submodule update --init* would run its command
+on the host. A submodule clone does not read this repository's config,
+so a local *user* does not override an *always* from the system or global
+config, *git -c*, or a *GIT_ALLOW_PROTOCOL* listing *ext*. The check runs
+at launch only.
 
 *celily* also warns when *fetch.fsckObjects* (or *transfer.fsckObjects*)
 is off. Objects are hash-checked either way; fsck additionally rejects
