@@ -317,10 +317,6 @@ Worktree mode configuration. Worktree mode is activated by passing
 in *celily*(1)). This section configures its behaviour.
 All fields are optional.
 
-*branch* = _string_
-	Template for the worktree branch name. _{name}_ is replaced with
-	the value passed to *--worktree*. Default: *celily/{name}*.
-
 *user_name* = _string_
 	Git user.name for commits made in worktree mode. Falls back to the
 	host project's git config when *None*.
