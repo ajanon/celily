@@ -1,3 +1,4 @@
+mod dns_handler;
 mod handler;
 mod mitmproxy;
 pub mod params;
