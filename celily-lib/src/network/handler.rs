@@ -5,7 +5,8 @@
 //!
 //! - host: case-insensitive, against the request authority. proxelar connects
 //!   upstream to that same authority: the host checked is the host reached.
-//! - path prefixes: the request path starts with one of them.
+//! - path prefixes: the request path starts with one of them, on a segment
+//!   boundary (`/v2` covers `/v2` and `/v2/x`, not `/v20`).
 //! - methods: case-insensitive, `GET` and `HEAD` when the rule has none.
 //!
 //! A matching request is counted against the rule's quota (429 once
@@ -160,7 +161,7 @@ fn rule_matches(rule: &NetworkRule, host: &str, path: &str, method: &str) -> boo
     };
     let path_allowed = match path_prefixes.as_deref() {
         None | Some([]) => true,
-        Some(prefixes) => prefixes.iter().any(|p| path.starts_with(p.as_str())),
+        Some(prefixes) => prefixes.iter().any(|p| path_has_prefix(path, p)),
     };
     let method_allowed = match methods {
         Some(methods) => methods.iter().any(|m| m.eq_ignore_ascii_case(method)),
@@ -169,6 +170,13 @@ fn rule_matches(rule: &NetworkRule, host: &str, path: &str, method: &str) -> boo
             .any(|m| m.eq_ignore_ascii_case(method)),
     };
     host.eq_ignore_ascii_case(rule_host) && path_allowed && method_allowed
+}
+
+/// Whether `path` is `prefix` or below it: the prefix must end on a
+/// segment boundary, so `/v2` covers `/v2` and `/v2/x` but not `/v20`.
+fn path_has_prefix(path: &str, prefix: &str) -> bool {
+    path.strip_prefix(prefix)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('/') || prefix.ends_with('/'))
 }
 
 /// Fixed-window request counter of one rule. Windows are aligned to the
@@ -359,6 +367,20 @@ mod tests {
         assert!(forwarded(&mut clone, "GET", "http://api.example.com/").await);
         let s = status(&mut h, "GET", "http://api.example.com/").await;
         assert_eq!(s, Some(StatusCode::TOO_MANY_REQUESTS));
+    }
+
+    #[test]
+    fn path_prefixes_end_on_a_segment_boundary() {
+        assert!(path_has_prefix("/v2", "/v2"));
+        assert!(path_has_prefix("/v2/x", "/v2"));
+        assert!(path_has_prefix("/v2/x", "/v2/"));
+        assert!(path_has_prefix("/anything", "/"));
+        assert!(!path_has_prefix("/v20", "/v2"));
+        assert!(!path_has_prefix("/v2", "/v2/"));
+        assert!(!path_has_prefix(
+            "/repos/canonicalevil/x",
+            "/repos/canonical"
+        ));
     }
 
     #[test]

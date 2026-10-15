@@ -482,10 +482,10 @@ more-specific rules first.
 	proxy connects to the host it checked.
 
 *path_prefixes* = _[strings]_ (optional)
-	Path prefixes to restrict the rule to (e.g. _["/v2"]_). Each
-	prefix is matched with _startswith_ -- _/v2_ matches
-	_/v2/foo_ but not _/v20_. The rule matches if the request
-	path starts with any of the listed prefixes.
+	Path prefixes to restrict the rule to (e.g. _["/v2"]_). A prefix
+	matches whole path segments -- _/v2_ matches _/v2_ and _/v2/foo_
+	but not _/v20_, and _/v2/_ matches only below _/v2_. The rule
+	matches if the request path starts with any of the listed prefixes.
 	When absent, the entire host is allowed.
 
 *methods* = _[strings]_ (optional)
