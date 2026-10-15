@@ -305,9 +305,10 @@ host yourself; use worktree mode otherwise.
 
 Every *celily* invocation creates a per-instance LXD/Incus bridge with
 an egress ACL that blocks all TCP traffic except connections to a
-per-instance mitmproxy. The mitmproxy enforces an allowlist of
-permitted hosts and optional path prefixes, and injects authentication
-headers where configured (see _auth_ in *celily-config*(5)).
+per-instance proxy running inside the *celily* process. The proxy
+enforces an allowlist of permitted hosts and optional path prefixes,
+and injects authentication headers where configured (see _auth_ in
+*celily-config*(5)).
 *HTTP_PROXY*, *HTTPS_PROXY*, *NODE_USE_ENV_PROXY* and *NODE_USE_SYSTEM_CA*
 are forcibly injected so that proxy-aware tools work transparently.
 Tools that ignore the proxy environment variables simply cannot reach
@@ -315,12 +316,6 @@ the internet on ports 80 or 443 -- the bridge ACL drops their packets.
 
 If more granular network containment is needed, configure it via
 LXD/Incus profiles or a custom bridge at the host level.
-
-mitmproxy logs are written to
-*$XDG_STATE_HOME/celily/logs/mitmdump_*_NAME_*.log*
-(typically *$XDG_STATE_HOME/celily/logs/*).
-The path is printed at instance start. Logs are removed on clean exit
-and preserved when mitmdump exits with an error.
 
 ## Disk exhaustion
 
@@ -339,9 +334,6 @@ the host's free space. Keep mounts read-only (the default) where possible.
 
 *$XDG_CONFIG_HOME/celily/profiles/*_NAME_*.toml*
 	Profile configuration files (same schema as config.toml).
-
-*$XDG_STATE_HOME/celily/logs/mitmdump_*_NAME_*.log*
-	mitmproxy logs (removed on clean exit, kept on error).
 
 # EXAMPLES
 

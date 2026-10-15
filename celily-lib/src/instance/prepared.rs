@@ -147,10 +147,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Prepared> {
             let provider = self.secret_provider.as_deref();
             let bridge = self.config.bridge_name.clone();
             let allow = self.config.network.allow.clone();
-            let dns = self.config.network.dns;
-            async move {
-                NetworkIsolation::setup(nb.as_ref(), &bridge, &cbp, &allow, dns, provider).await
-            }
+            async move { NetworkIsolation::setup(nb.as_ref(), &bridge, &cbp, &allow, provider).await }
         };
 
         let devices_future = async {

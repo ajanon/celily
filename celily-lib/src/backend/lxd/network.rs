@@ -121,7 +121,7 @@ impl BridgeGuard for LxdBridgeGuard {}
 ///
 /// When `dns` is `true`, returns a dnsmasq config that disables
 /// upstream resolvers, disables caching, and forwards all queries
-/// to mitmproxy's DNS listener on the gateway. When `dns` is
+/// to the DNS proxy on the gateway. When `dns` is
 /// `false`, returns `None` (no DNS filtering).
 fn build_dnsmasq_config(dns: bool, gateway_ip: &str, dns_port: u16) -> Option<String> {
     dns.then(|| {

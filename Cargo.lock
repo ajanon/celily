@@ -410,7 +410,6 @@ dependencies = [
  "proxyapi",
  "rustls",
  "serde",
- "serde_json",
  "strum",
  "thiserror",
  "tokio",

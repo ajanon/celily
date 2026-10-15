@@ -3,12 +3,12 @@ use bon::Builder;
 use super::rule::NetworkRule;
 use crate::backend::{CreateBridgeParams, TcpAllow};
 
-/// The fixed TCP port mitmdump listens on for HTTP proxying. Each
-/// instance gets its own bridge with a unique gateway IP, so there is
-/// no cross-instance port contention.
+/// The fixed TCP port the HTTP proxy listens on. Each instance gets its
+/// own bridge with a unique gateway IP, so there is no cross-instance
+/// port contention.
 pub(crate) const PROXY_PORT: u16 = 34975;
 
-/// The fixed port mitmdump's DNS listener uses. One above the HTTP
+/// The fixed UDP port the DNS proxy listens on. One above the HTTP
 /// proxy port -- high enough to avoid privileged-port restrictions.
 pub(crate) const DNS_PORT: u16 = PROXY_PORT + 1;
 
@@ -22,7 +22,7 @@ pub struct NetworkParams {
 
     /// Enable DNS filtering through the proxy. When true, the bridge
     /// ACL restricts DNS to the gateway only, forcing all DNS traffic
-    /// through mitmproxy where the allowlist is enforced.
+    /// through the DNS proxy where the allowlist is enforced.
     #[builder(default = true)]
     pub dns: bool,
 }

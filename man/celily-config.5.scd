@@ -426,18 +426,20 @@ target = "/mnt/client"
 # [network] SECTION
 
 Network isolation is mandatory. Every *celily* invocation creates a
-per-instance LXD/Incus bridge with an egress ACL and a per-instance mitmproxy
-process that enforces the allowlist.
+per-instance LXD/Incus bridge with an egress ACL and per-instance proxies,
+running inside the *celily* process, that enforce the allowlist.
 
 - A dedicated bridge is created for the instance with an egress ACL
 	that blocks all TCP traffic except connections to the proxy.
 	DNS (UDP+TCP 53) is restricted to the bridge gateway by default
 	(_dns_ defaults to true). Set _dns = false_ to allow DNS to
 	any destination.
-- A per-instance mitmdump process runs on the host, bound to the
-	bridge gateway IP. It provides an HTTP forward proxy and a DNS
-	server. The container uses it as an explicit HTTP forward proxy
-	and as its primary DNS resolver.
+- An HTTP forward proxy and a DNS proxy run inside the *celily*
+	process on the host, bound to the bridge gateway IP. The container
+	uses the first as an explicit HTTP forward proxy and the second,
+	through the bridge's dnsmasq, as its DNS resolver. Allowed DNS
+	queries are resolved by the first nameserver of the host's
+	_/etc/resolv.conf_.
 - *HTTP_PROXY*, *HTTPS_PROXY*, *NO_PROXY*, *NODE_USE_ENV_PROXY* and
 	*NODE_USE_SYSTEM_CA* environment variables are forcibly injected
 	into the container at the highest priority -- they cannot be
@@ -453,8 +455,8 @@ HTTP/HTTPS.
 *dns* = _bool_ (optional)
 	Enable DNS filtering. When true (default), the bridge ACL restricts DNS
 	to the gateway only and the bridge's dnsmasq is configured to forward
-	all queries to mitmdump's DNS listener (on a high port, no privileged
-	port required). The allowlist is enforced on every query (hostname match
+	all queries to the DNS proxy (on a high port, no privileged port
+	required). The allowlist is enforced on every query (hostname match
 	only; path prefixes are ignored). Set to false to allow DNS to any
 	destination with the proxy DNS listener not filtering.
 
@@ -475,15 +477,15 @@ more-specific rules first.
 
 *type* = _string_ (required)
 	Rule type. Supported values:
-	- *"http"* -- HTTP/HTTPS host rules (see below). Enforced by the per-instance mitmproxy.
+	- *"http"* -- HTTP/HTTPS host rules (see below). Enforced by the per-instance proxy.
 	- *"tcp"* -- Raw TCP destination rules (see TCP RULES below). Enforced by the bridge egress ACL (nftables).
 
 *HTTP rules* (type = "http")
 
 *host* = _string_ (required)
-	Hostname to allow (e.g. *api.example.com*). Matched against the
-	HTTP Host header. Matching is case-insensitive -- hostnames from
-	config are normalized to lowercase before comparison.
+	Hostname to allow (e.g. *api.example.com*). Matched,
+	case-insensitively, against the host the request is sent to: the
+	proxy connects to the host it checked.
 
 *path_prefixes* = _[strings]_ (optional)
 	Path prefixes to restrict the rule to (e.g. _["/v2"]_). Each
@@ -508,7 +510,7 @@ methods = ["GET", "HEAD", "POST", "PUT"]
 
 *HTTP auth sub-table* (optional, on HTTP [[network.allow]])
 
-When present, the specified HTTP header is injected by mitmdump on
+When present, the specified HTTP header is injected by the proxy on
 matching requests. The secret never appears in the container's
 environment.
 
@@ -525,7 +527,7 @@ environment.
 
 *HTTP headers table* (optional, on HTTP [[network.allow]])
 
-When present, the specified static HTTP headers are injected by mitmdump
+When present, the specified static HTTP headers are injected by the proxy
 on matching requests. Values are plain text (no secret resolution).
 
 _key_ = _value_
@@ -621,9 +623,9 @@ CARGO_TERM_COLOR = "always"
 	Configuration directory. Defaults to *$HOME/.config* if unset.
 	celily reads all configuration from *$XDG_CONFIG_HOME/celily/*.
 
-*XDG_STATE_HOME*
-	State and log directory. Defaults to *$HOME/.local/state* if unset.
-	mitmproxy logs are written to *$XDG_STATE_HOME/celily/logs/*.
+*XDG_RUNTIME_DIR*
+	Required. Holds the per-instance proxy CA, in a private directory
+	removed when *celily* exits.
 
 *HOME*
 	Home directory. Used as the base for forbidden path checks in

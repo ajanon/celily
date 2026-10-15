@@ -20,7 +20,7 @@ pub struct Initialized<IB: InstanceBackend> {
     pub guard: InstanceGuard<IB>,
     /// Network isolation (proxy + bridge guard).
     pub isolation: NetworkIsolation,
-    /// PEM-encoded CA certificate for mitmproxy.
+    /// PEM-encoded CA certificate of the MITM proxy.
     pub ca_cert: String,
 }
 
@@ -61,7 +61,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Initialized<IB>> 
         }
 
         let container_cert_path = format!(
-            "{}/mitmproxy-ca-cert.pem",
+            "{}/mitm-ca-cert.pem",
             self.config.distro.ca_cert_anchors_dir(),
         );
         self.instance_backend

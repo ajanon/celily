@@ -32,11 +32,12 @@ pub use limits::Limits;
 pub use mount::{AccessMode, Mount};
 pub use network::{
     AuthConfig,
-    MitmProxyError,
     NetworkError,
     NetworkIsolation,
     NetworkParams,
     NetworkRule,
+    ProxelarError,
+    ProxelarGuard,
     QuotaConfig,
 };
 pub use secrets::{Providers, SecretError, SecretProvider};

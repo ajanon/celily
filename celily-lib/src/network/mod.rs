@@ -1,6 +1,5 @@
 mod dns_handler;
 mod handler;
-mod mitmproxy;
 pub mod params;
 mod proxelar;
 pub mod rule;
@@ -8,9 +7,8 @@ pub mod rule;
 use std::collections::HashMap;
 use std::net::IpAddr;
 
-use mitmproxy::MitmProxy;
-pub use mitmproxy::MitmProxyError;
 pub use params::NetworkParams;
+pub use proxelar::{ProxelarError, ProxelarGuard};
 pub use rule::{AuthConfig, NetworkRule, QuotaConfig};
 
 use crate::backend::{BridgeGuard, CreateBridgeParams, NetworkBackend};
@@ -23,9 +21,9 @@ pub enum NetworkError {
     #[error("backend error: {0}")]
     Backend(Box<dyn std::error::Error + Send + Sync>),
 
-    /// The mitmproxy failed to start.
+    /// The proxy failed to start.
     #[error(transparent)]
-    Proxy(#[from] MitmProxyError),
+    Proxy(#[from] ProxelarError),
 
     /// A secret could not be resolved.
     #[error(transparent)]
@@ -39,21 +37,20 @@ pub enum NetworkError {
 /// Callers should drop the `InstanceGuard` *before* dropping this guard
 /// so the instance is gone before the bridge is deleted.
 pub struct NetworkIsolation {
-    pub proxy: MitmProxy,
+    pub proxy: ProxelarGuard,
     pub gateway_ip: IpAddr,
     pub bridge_guard: Box<dyn BridgeGuard>,
 }
 
 impl NetworkIsolation {
     /// Full setup. Creates the isolation bridge via the backend,
-    /// starts mitmproxy, and returns the isolation guard and the
-    /// PEM-encoded CA certificate.
+    /// starts the in-process proxies, and returns the isolation guard
+    /// and the PEM-encoded CA certificate.
     pub(crate) async fn setup<NB: NetworkBackend>(
         backend: &NB,
         bridge_name: &str,
         params: &CreateBridgeParams,
         allow: &[NetworkRule],
-        dns: bool,
         provider: Option<&dyn SecretProvider<Error = SecretError>>,
     ) -> Result<(Self, String), NetworkError> {
         let (bridge_guard, gateway_ip) = backend
@@ -77,21 +74,8 @@ impl NetworkIsolation {
             }
         }
 
-        let gateway_ip_str = gateway_ip.to_string();
-        let bridge_name_owned = bridge_name.to_string();
-        let allow_owned = allow.to_vec();
-        let (proxy, ca_cert) = tokio::task::spawn_blocking(move || {
-            MitmProxy::start(
-                &bridge_name_owned,
-                &gateway_ip_str,
-                dns,
-                &allow_owned,
-                &auth_secrets,
-            )
-        })
-        .await
-        .map_err(|e| MitmProxyError::TaskPanic(e.to_string()))
-        .and_then(|r| r)?;
+        let (proxy, ca_cert) =
+            ProxelarGuard::start(bridge_name, gateway_ip, allow.to_vec(), auth_secrets).await?;
 
         Ok((
             Self {
