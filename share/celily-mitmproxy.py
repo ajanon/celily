@@ -113,6 +113,16 @@ class CelilyAddon:
         s.close()
         self._notify_ready()
 
+    def http_connect(self, flow: http.HTTPFlow) -> None:
+        """Deny CONNECT to hosts not in the allowlist."""
+        host = flow.request.pretty_host.lower()
+        if not any(host == rule["host"] for rule in self.rules_allow):
+            flow.response = http.Response.make(
+                403,
+                b"Blocked by network policy",
+                {"Content-Type": "text/plain"},
+            )
+
     def request(self, flow: http.HTTPFlow) -> None:
         host = flow.request.pretty_host
         path = flow.request.path

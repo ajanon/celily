@@ -167,6 +167,8 @@ impl MitmProxy {
                 &format!("dns@{gateway_ip}:{DNS_PORT}"),
                 "--set",
                 &format!("confdir={}", confdir.display()),
+                "--set",
+                "rawtcp=false",
                 "--scripts",
                 "/usr/share/celily/celily-mitmproxy.py",
                 "--flow-detail",
