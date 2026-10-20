@@ -53,6 +53,7 @@ impl NetworkParams {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::network::rule::HttpScheme;
 
     fn make_params(allow: Vec<NetworkRule>) -> NetworkParams {
         NetworkParams { allow }
@@ -117,6 +118,7 @@ mod tests {
     fn to_create_bridge_params_http_rules_ignored() {
         let params = NetworkParams {
             allow: vec![NetworkRule::Http {
+                scheme: HttpScheme::Https,
                 host: "api.example.com".into(),
                 path_prefixes: None,
                 auth: None,

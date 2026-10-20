@@ -35,6 +35,17 @@ pub struct AuthConfig {
     pub prefix: Option<String>,
 }
 
+/// The scheme of the requests an HTTP rule allows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HttpScheme {
+    /// Plain HTTP: the request, auth header included, crosses the network
+    /// from the host unencrypted.
+    Http,
+    /// HTTPS: TLS from the instance to the proxy (intercepted with the
+    /// instance's CA), and verified TLS from the proxy to the host.
+    Https,
+}
+
 /// A single network isolation rule.
 ///
 /// Rules are checked in config-file order; first match wins. Anything
@@ -44,10 +55,12 @@ pub struct AuthConfig {
 /// bypass the HTTP proxy entirely.
 #[derive(Debug, Clone)]
 pub enum NetworkRule {
-    /// An HTTP/HTTPS host with optional path prefix, method
+    /// An HTTP or HTTPS host with optional path prefix, method
     /// restriction, auth injection, and static headers.
     /// All traffic to this host goes through the MITM proxy.
     Http {
+        /// Only requests of this scheme match the rule.
+        scheme: HttpScheme,
         host: String,
         /// Path prefixes the request path must start with. When absent,
         /// all paths match; an empty list matches none.

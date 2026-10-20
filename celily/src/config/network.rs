@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use celily_lib::{AuthConfig, NetworkRule, QuotaConfig};
+use celily_lib::{AuthConfig, HttpScheme, NetworkRule, QuotaConfig};
 use merge::Merge;
 use serde::Deserialize;
 
@@ -29,19 +29,10 @@ pub struct NetworkConfig {
 #[serde(tag = "type", deny_unknown_fields)]
 pub enum ConfigNetworkRule {
     #[serde(rename = "http")]
-    Http {
-        host: String,
-        #[serde(default)]
-        path_prefixes: Option<Vec<String>>,
-        #[serde(default)]
-        auth: Option<AuthConfig>,
-        #[serde(default)]
-        headers: HashMap<String, String>,
-        #[serde(default)]
-        methods: Option<Vec<String>>,
-        #[serde(default)]
-        quota: Option<ConfigQuotaConfig>,
-    },
+    Http(ConfigHttpRule),
+
+    #[serde(rename = "https")]
+    Https(ConfigHttpRule),
 
     #[serde(rename = "tcp")]
     Tcp {
@@ -50,40 +41,64 @@ pub enum ConfigNetworkRule {
     },
 }
 
+/// The keys of an `http` or `https` rule.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConfigHttpRule {
+    host: String,
+    #[serde(default)]
+    path_prefixes: Option<Vec<String>>,
+    #[serde(default)]
+    auth: Option<AuthConfig>,
+    #[serde(default)]
+    headers: HashMap<String, String>,
+    #[serde(default)]
+    methods: Option<Vec<String>>,
+    #[serde(default)]
+    quota: Option<ConfigQuotaConfig>,
+}
+
 impl ConfigNetworkRule {
     /// Validate and convert to a library [`NetworkRule`].
     pub fn into_library(self) -> Result<NetworkRule, ConfigError> {
         match self {
-            Self::Http {
-                host,
-                path_prefixes,
-                auth,
-                headers,
-                methods,
-                quota,
-            } => {
-                // `path_prefixes = []` reads as "no path" but would allow
-                // all of them, `methods = []` would never match: leaving the
-                // key out is the way to get the default.
-                for (key, list) in [("path_prefixes", &path_prefixes), ("methods", &methods)] {
-                    if list.as_ref().is_some_and(Vec::is_empty) {
-                        return Err(ConfigError::Validation(format!(
-                            "allow rule for {host}: {key} is empty (leave it out for the default)"
-                        )));
-                    }
-                }
-                let quota = quota.map(ConfigQuotaConfig::into_library).transpose()?;
-                Ok(NetworkRule::Http {
-                    host,
-                    path_prefixes,
-                    auth,
-                    headers,
-                    methods,
-                    quota,
-                })
-            },
+            Self::Http(rule) => rule.into_library(HttpScheme::Http),
+            Self::Https(rule) => rule.into_library(HttpScheme::Https),
             Self::Tcp { host, ports } => Ok(NetworkRule::Tcp { host, ports }),
         }
+    }
+}
+
+impl ConfigHttpRule {
+    fn into_library(self, scheme: HttpScheme) -> Result<NetworkRule, ConfigError> {
+        let Self {
+            host,
+            path_prefixes,
+            auth,
+            headers,
+            methods,
+            quota,
+        } = self;
+        // `path_prefixes = []` reads as "no path" but would allow all of
+        // them, `methods = []` would never match: leaving the key out is the
+        // way to get the default.
+        for (key, list) in [("path_prefixes", &path_prefixes), ("methods", &methods)] {
+            if list.as_ref().is_some_and(Vec::is_empty) {
+                return Err(ConfigError::Validation(format!(
+                    "allow rule for {host}: {key} is empty (leave it out for the default)"
+                )));
+            }
+        }
+        let quota = quota.map(ConfigQuotaConfig::into_library).transpose()?;
+        Ok(NetworkRule::Http {
+            scheme,
+            host,
+            path_prefixes,
+            auth,
+            headers,
+            methods,
+            quota,
+        })
     }
 }
 
@@ -165,6 +180,22 @@ quota = { max_requests = 0, window = "1h" }
         let rule = nc.allow.into_iter().next().unwrap();
         let err = rule.into_library().unwrap_err();
         assert!(err.to_string().contains("max_requests must be > 0"));
+    }
+
+    #[test]
+    fn http_and_https_types_set_the_scheme() {
+        for (kind, expected) in [("http", HttpScheme::Http), ("https", HttpScheme::Https)] {
+            let toml = format!("[[allow]]\ntype = \"{kind}\"\nhost = \"a.example\"\n");
+            let nc: NetworkConfig = toml::from_str(&toml).unwrap();
+            let rule = nc.allow.into_iter().next().unwrap().into_library().unwrap();
+            let NetworkRule::Http { scheme, .. } = rule else {
+                panic!("expected an HTTP rule");
+            };
+            assert_eq!(scheme, expected);
+        }
+        let toml = "[[allow]]\ntype = \"https\"\nhost = \"a.example\"\nport = 1\n";
+        let err = toml::from_str::<NetworkConfig>(toml).unwrap_err();
+        assert!(err.to_string().contains("unknown field"), "{err}");
     }
 
     #[test]
