@@ -300,7 +300,6 @@ pub fn resolve_context(
             gid: container_gid,
             host_uid,
             host_gid,
-            bind: proxy.bind,
             mode: proxy.mode.clone(),
         });
     }

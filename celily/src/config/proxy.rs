@@ -1,10 +1,9 @@
-use celily_lib::ProxyBind;
 use serde::Deserialize;
 
 /// Configuration for a Unix socket proxy device.
 ///
 /// Exposes a host Unix socket inside the instance through an LXD/Incus
-/// proxy device.
+/// proxy device listening in the instance.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ProxyDevice {
     /// Host-side socket path in LXD/Incus proxy format (e.g.
@@ -12,16 +11,9 @@ pub struct ProxyDevice {
     pub connect: String,
     /// Instance-side listen path (e.g. `unix:/run/dbus-notifications.sock`).
     pub listen: String,
-    /// Which side the proxy listens on: `"instance"` (default) or `"host"`.
-    #[serde(default = "default_bind")]
-    pub bind: ProxyBind,
     /// File mode for the socket inside the instance (e.g. `"0600"`).
     #[serde(default = "default_mode")]
     pub mode: String,
-}
-
-fn default_bind() -> ProxyBind {
-    ProxyBind::Instance
 }
 
 fn default_mode() -> String {

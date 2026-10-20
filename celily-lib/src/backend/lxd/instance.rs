@@ -126,7 +126,6 @@ impl crate::backend::InstanceBackend for LxcBackend {
                 gid,
                 host_uid,
                 host_gid,
-                bind,
                 mode,
             } => {
                 self.lxc_project_command_async()
@@ -137,7 +136,7 @@ impl crate::backend::InstanceBackend for LxcBackend {
                         name,
                         dev_name,
                         "proxy",
-                        &format!("bind={bind}"),
+                        "bind=instance",
                         &format!("connect={connect}"),
                         &format!("listen={listen}"),
                         &format!("mode={mode}"),
