@@ -284,7 +284,10 @@ sockets grant access to secrets, session control, or container
 management and cannot be proxied.
 
 *Boundary:* The socket path must be under *$HOME* or
-*$XDG_RUNTIME_DIR* (falling back to */run/user/<uid>*).
+*$XDG_RUNTIME_DIR* (falling back to */run/user/<uid>*). It must not go
+through a symlink under *$HOME*, nor be under a read-write mount: the
+sandbox could replace it with a link to another socket. The resolved path
+is the one handed to LXD/Incus.
 
 *connect* = _string_ (required)
 	Host-side socket path in LXD/Incus proxy format. Only *unix:*

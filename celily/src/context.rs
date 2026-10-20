@@ -292,9 +292,12 @@ pub fn resolve_context(
     let host_gid = nix::unistd::Gid::current().as_raw();
     let mut extra_devices: Vec<Device> = Vec::new();
     for proxy in &cfg.proxy {
-        validate_proxy_connect(&proxy.connect, home_canon, host_uid)?;
+        let socket = validate_proxy_connect(&proxy.connect, home_canon, host_uid, &mounts)?;
+        let socket = socket
+            .to_str()
+            .with_context(|| format!("proxy socket {} is not UTF-8", socket.display()))?;
         extra_devices.push(Device::Proxy {
-            connect: proxy.connect.clone(),
+            connect: format!("unix:{socket}"),
             listen: proxy.listen.clone(),
             uid: container_uid,
             gid: container_gid,

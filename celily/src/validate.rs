@@ -12,7 +12,7 @@ pub enum ForbiddenError {
     #[error("path contains {label} (forbidden)")]
     Contains { label: &'static str },
 }
-use celily_lib::{AsyncCommandExt, CommandError};
+use celily_lib::{AccessMode, AsyncCommandExt, CommandError, Mount};
 
 use crate::util::{git_config, is_under_or_eq};
 
@@ -192,18 +192,26 @@ pub fn validate_mount_source(
 /// Security rules (enforced in order):
 ///
 /// 1. The connect string must start with `unix:`.
-/// 2. The extracted path must canonicalize successfully.
+/// 2. The extracted path must canonicalize with [`canonicalize_in_home`].
 /// 3. The canonical path must pass every entry in the proxy-forbidden list
 /// 4. The canonical path must be under `$HOME` or the user's `$XDG_RUNTIME_DIR`
 ///    (defaulting to `/run/user/<uid>`).
-pub fn validate_proxy_connect(connect: &str, home: &Path, uid: u32) -> Result<()> {
+/// 5. The canonical path must not be under a read-write mount of `mounts`.
+///
+/// LXD resolves the path again on every connection: hand it the canonical
+/// path this returns, never `connect`. 5 keeps the sandbox from swapping the
+/// socket for a symlink to another one during the session.
+pub fn validate_proxy_connect(
+    connect: &str,
+    home: &Path,
+    uid: u32,
+    mounts: &[Mount],
+) -> Result<PathBuf> {
     let path_str = connect
         .strip_prefix("unix:")
         .context("proxy connect must start with `unix:` (only Unix sockets are supported)")?;
 
-    let path = Path::new(path_str);
-    let canonical = path
-        .canonicalize()
+    let canonical = canonicalize_in_home(Path::new(path_str), home)
         .with_context(|| format!("cannot resolve proxy socket {path_str}"))?;
 
     let runtime_dir_raw = PathBuf::from(
@@ -226,7 +234,18 @@ pub fn validate_proxy_connect(connect: &str, home: &Path, uid: u32) -> Result<()
         );
     }
 
-    Ok(())
+    let writable = mounts
+        .iter()
+        .find(|m| m.access == AccessMode::ReadWrite && is_under_or_eq(&canonical, &m.source));
+    if let Some(mount) = writable {
+        bail!(
+            "proxy socket {path_str} is under the read-write mount {}: the sandbox could replace \
+             it",
+            mount.source.display(),
+        );
+    }
+
+    Ok(canonical)
 }
 
 /// Build the forbidden-path list for proxy devices.
@@ -742,6 +761,27 @@ mod tests {
         )
         .unwrap_err();
         assert!(format!("{err:#}").contains("path contains ~/.ssh"));
+    }
+
+    #[test]
+    fn proxy_socket_is_canonical_and_not_under_a_writable_mount() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = canonic_path(dir.path());
+        let run = home.join("run");
+        std::fs::create_dir_all(&run).unwrap();
+        let _listener = std::os::unix::net::UnixListener::bind(run.join("sock")).unwrap();
+        let connect = format!("unix:{}/./run/sock", home.display());
+        let mount = |access| Mount {
+            source: run.clone(),
+            target: PathBuf::from("/run/host"),
+            access,
+        };
+
+        let socket = validate_proxy_connect(&connect, &home, 0, &[mount(AccessMode::ReadOnly)]);
+        assert_eq!(socket.unwrap(), run.join("sock"));
+        let err = validate_proxy_connect(&connect, &home, 0, &[mount(AccessMode::ReadWrite)])
+            .unwrap_err();
+        assert!(format!("{err:#}").contains("under the read-write mount"));
     }
 
     #[test]
