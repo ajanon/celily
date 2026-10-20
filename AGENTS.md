@@ -158,18 +158,22 @@ merging).
 happens before `validate_mount_source` is called, inside `resolve_context`.
 `validate_mount_source` canonicalizes the path, checks it against the forbidden
 list and allowlists (from `Config`), and returns the canonical form -- the
-original path in the `Mount` struct is replaced with the canonical one.
+original path in the `Mount` struct is replaced with the canonical one. Sources
+and allowlist entries are canonicalized with `canonicalize_in_home`, which
+refuses any symlink under `$HOME` on the way: a sandbox with RW access to a
+directory could otherwise swap an entry for a symlink before the next run.
 
 **Mount validation security model** (`validate_mount_source` in
 `celily/src/validate.rs`):
 
 1. At least one of `allowed_dirs` or `allowed_files` must be non-empty.
+1. The path must not go through a symlink under `$HOME`.
 1. Forbidden paths are checked first -- any match (exact or subtree, depending
    on variant) is a hard rejection.
 1. The canonical path must be under `$HOME` (using `is_under_or_eq`).
 1. The path must be an exact match in `allowed_dirs` (for directories) or
-   `allowed_files` (for files). Subtrees are not implicitly allowed. Symlinks,
-   sockets, and special files are rejected.
+   `allowed_files` (for files). Subtrees are not implicitly allowed. Sockets and
+   special files are rejected.
 
 Forbidden path types:
 

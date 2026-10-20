@@ -142,7 +142,8 @@ and mounted read-only by default and:
   - `~/.ssh`, `~/.gnupg`, `~/.local/share/keyrings`
   - any directory containing one of the three above (e.g. through a symlinked
     dotfiles layout)
-- Symlinks, sockets, and special files are rejected.
+- Sources and allowlist entries going through a symlink under `$HOME` are
+  rejected, as are sockets and special files.
 
 ### Network isolation
 

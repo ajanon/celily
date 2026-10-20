@@ -244,7 +244,10 @@ curl -s --unix-socket /tmp/agent.sock http://localhost/refresh
 	the host home directory. Every mount source (including the current working
 	directory) must be under the current user's *$HOME*, and must be an
 	exact match for an entry in this list. Subtree matching is intentionally
-	rejected -- only explicitly listed directories can be mounted.
+	rejected -- only explicitly listed directories can be mounted. An entry
+	that goes through a symlink under *$HOME* is an error: a sandbox with
+	write access next to it could otherwise point it elsewhere for the next
+	run. Missing entries are skipped with a warning.
 
 *allowed_files* = _[paths]_
 	*Required.* File paths that may be bind-mounted. A leading *~* expands to the
