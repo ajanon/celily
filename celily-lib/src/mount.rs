@@ -15,6 +15,7 @@ pub enum AccessMode {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct Mount {
     pub source: PathBuf,
     pub target: PathBuf,

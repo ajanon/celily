@@ -5,6 +5,7 @@ use serde::Deserialize;
 /// Exposes a host Unix socket inside the instance through an LXD/Incus
 /// proxy device listening in the instance.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProxyDevice {
     /// Host-side socket path in LXD/Incus proxy format (e.g.
     /// `unix:/run/user/1000/dbus-notifications.sock`).

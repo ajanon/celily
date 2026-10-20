@@ -12,7 +12,7 @@ use super::ConfigError;
 /// Holds raw deserialized types. Call [`ConfigNetworkRule::into_library`]
 /// to validate and convert to the library's [`NetworkRule`].
 #[derive(Debug, Default, Clone, Deserialize, Merge)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 #[merge(strategy = super::merge_strategy::overwrite_some)]
 pub struct NetworkConfig {
     /// Allowed hosts/paths. Default-deny: anything not matched is
@@ -26,7 +26,7 @@ pub struct NetworkConfig {
 /// Mirrors [`NetworkRule`] but uses [`ConfigQuotaConfig`] for the
 /// quota field (raw string window, validated on conversion).
 #[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", deny_unknown_fields)]
 pub enum ConfigNetworkRule {
     #[serde(rename = "http")]
     Http {
@@ -92,6 +92,7 @@ impl ConfigNetworkRule {
 /// The `window` field accepts human-readable duration strings like
 /// `"1h"`, `"30m"`, `"86400s"`, `"7d"`.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ConfigQuotaConfig {
     pub max_requests: u64,
     #[serde(deserialize_with = "deserialize_window_duration")]

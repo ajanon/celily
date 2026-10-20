@@ -6,7 +6,7 @@ use serde::Deserialize;
 /// All fields are optional. Worktree mode is activated by passing
 /// `--worktree NAME` on the CLI; this section configures its behaviour.
 #[derive(Debug, Default, Deserialize, Merge)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 #[merge(strategy = super::merge_strategy::overwrite_some)]
 pub struct WorktreeConfig {
     /// Git user.name for commits made in worktree mode. Falls back to the
