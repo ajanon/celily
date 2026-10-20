@@ -14,16 +14,6 @@ pub mod mock;
 // Shared types
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, strum::Display)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
-#[strum(serialize_all = "lowercase")]
-pub enum ProxyBind {
-    #[default]
-    Instance,
-    Host,
-}
-
 /// A device to attach to an instance.
 #[derive(Debug, Clone)]
 pub enum Device {
@@ -33,7 +23,8 @@ pub enum Device {
         target: PathBuf,
         access: AccessMode,
     },
-    /// Unix socket proxy
+    /// Unix socket proxy, listening in the instance and connecting on the
+    /// host.
     Proxy {
         /// LXD/Incus proxy connect string (e.g. `unix:/run/user/1000/sock`).
         connect: String,
@@ -43,7 +34,6 @@ pub enum Device {
         gid: u32,
         host_uid: u32,
         host_gid: u32,
-        bind: ProxyBind,
         /// File mode for the socket inside the instance (e.g. `"0600"`).
         mode: String,
     },

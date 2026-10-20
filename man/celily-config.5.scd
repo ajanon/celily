@@ -295,10 +295,6 @@ management and cannot be proxied.
 	Container-side listen path in LXD/Incus proxy format (e.g.
 	*unix:/run/sock*).
 
-*bind* = _string_ (optional)
-	Which side the proxy listens on, *"instance"*, or *"host"*.
-	Default: *"instance"*.
-
 *mode* = _string_ (optional)
 	File mode for the socket inside the container (e.g. *"0644"*).
 	Default: *"0600"*.

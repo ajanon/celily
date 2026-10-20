@@ -14,7 +14,6 @@ pub use backend::{
     Device,
     InstanceBackend,
     NetworkBackend,
-    ProxyBind,
     TcpAllow,
 };
 pub use command::{AsyncCommandExt, ChildExt, CommandError, CommandExt, ShutdownStatus};
