@@ -506,6 +506,12 @@ more-specific rules first.
 	defaults to _["GET", "HEAD"]_. When present, only requests whose method
 	appears in the list match the rule -- other methods fall through
 	to the next rule or the default deny. An empty list is an error.
+	A request carrying *X-HTTP-Method-Override*, *X-HTTP-Method* or
+	*X-Method-Override* is refused (403), whatever the rules: some servers
+	would serve that method instead of the one checked. A _\_method_
+	parameter in the query or a form body does the same on some
+	frameworks, and is not checked: allow *POST* only where that is
+	acceptable.
 
 Example with non-default methods:
 ```

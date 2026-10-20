@@ -14,7 +14,9 @@
 //!   boundary (`/v2` covers `/v2` and `/v2/x`, not `/v20`), and has no segment
 //!   a server could read as `.` or `..` (`%2e%2e`, `..%2f`, `..;`, `%252e`):
 //!   those could resolve outside the prefix.
-//! - methods: case-insensitive, `GET` and `HEAD` when the rule has none.
+//! - methods: case-insensitive, `GET` and `HEAD` when the rule has none. A
+//!   request carrying a method override header is refused outright: servers
+//!   honouring it would serve another method than the one checked.
 //!
 //! A matching request is counted against the rule's quota (429 once
 //! exhausted), gets the rule's static headers and then its auth header,
@@ -47,6 +49,17 @@ use crate::backend::BridgeSubnet;
 
 /// Methods allowed by a rule that does not list any.
 const DEFAULT_METHODS: [&str; 2] = ["GET", "HEAD"];
+
+/// Headers some servers read as the request method: to them, a `POST`
+/// carrying `X-HTTP-Method-Override: DELETE` is a `DELETE`.
+///
+/// Ceiling: a `_method` parameter in the query or a form body does the same
+/// on some frameworks (Rails, Laravel, Symfony), and is not looked at.
+const METHOD_OVERRIDE_HEADERS: [&str; 3] = [
+    "x-http-method-override",
+    "x-http-method",
+    "x-method-override",
+];
 
 /// HTTP handler enforcing celily's allowlist.
 ///
@@ -101,6 +114,15 @@ impl HttpHandler for CelilyHandler {
         let Some(host) = request.head.uri.host() else {
             return self.reject(StatusCode::BAD_REQUEST, b"request is missing a host\n");
         };
+        if METHOD_OVERRIDE_HEADERS
+            .iter()
+            .any(|name| request.head.headers.contains_key(name))
+        {
+            return self.reject(
+                StatusCode::FORBIDDEN,
+                b"Method override headers are not allowed\n",
+            );
+        }
         let path = request.head.uri.path();
         let method = request.head.method.as_str();
         let Some(index) = self
@@ -567,5 +589,30 @@ mod tests {
             };
             assert_eq!(r.head.status, StatusCode::FORBIDDEN);
         }
+    }
+
+    #[tokio::test]
+    async fn method_override_headers_get_403() {
+        let rule = NetworkRule::Http {
+            host: "api.example.com".into(),
+            path_prefixes: None,
+            auth: None,
+            headers: HashMap::new(),
+            methods: Some(vec!["POST".into()]),
+            quota: None,
+        };
+        let mut h = test_handler(vec![rule], HashMap::new());
+        let ctx = HttpContext {
+            remote_addr: "10.0.0.2:40000".parse().unwrap(),
+        };
+        for name in METHOD_OVERRIDE_HEADERS.map(str::to_ascii_uppercase) {
+            let mut r = request("POST", "https://api.example.com/");
+            r.head.headers.set(&name, "DELETE").unwrap();
+            let RequestOrResponse::Response(r) = h.handle_request(&ctx, r).await else {
+                panic!("{name} was forwarded");
+            };
+            assert_eq!(r.head.status, StatusCode::FORBIDDEN);
+        }
+        assert!(forwarded(&mut h, "POST", "https://api.example.com/").await);
     }
 }
