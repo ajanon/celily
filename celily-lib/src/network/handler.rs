@@ -7,8 +7,8 @@
 //!   upstream to that same authority: the host checked is the host reached.
 //! - path prefixes: the request path starts with one of them, on a segment
 //!   boundary (`/v2` covers `/v2` and `/v2/x`, not `/v20`), and has no segment
-//!   a server could read as `.` or `..` (`%2e%2e`, `..%2f`, `..;`): those could
-//!   resolve outside the prefix.
+//!   a server could read as `.` or `..` (`%2e%2e`, `..%2f`, `..;`, `%252e`):
+//!   those could resolve outside the prefix.
 //! - methods: case-insensitive, `GET` and `HEAD` when the rule has none.
 //!
 //! A matching request is counted against the rule's quota (429 once
@@ -186,15 +186,18 @@ fn path_has_prefix(path: &str, prefix: &str) -> bool {
 /// Whether a server could resolve `path` outside a prefix it starts with:
 /// a segment reads as `.` or `..` once percent-decoded, split on `\` as
 /// well as `/`, and cut at `;` (`..;` is `..` to servers that drop path
-/// parameters).
+/// parameters). A `%` left after decoding once counts too: a server
+/// decoding twice reads `%252e%252e` as `..`.
 ///
 /// Ceiling: servers folding non-ASCII into dots (U+FF0E, overlong UTF-8
 /// `%c0%ae`) are not covered. Refusing non-ASCII bytes would cover them.
 fn may_escape_prefix(path: &str) -> bool {
-    percent_decode(path)
-        .split(|&b| b == b'/' || b == b'\\')
-        .map(|segment| segment.split(|&b| b == b';').next().unwrap_or_default())
-        .any(|segment| segment == b"." || segment == b"..")
+    let decoded = percent_decode(path);
+    decoded.contains(&b'%')
+        || decoded
+            .split(|&b| b == b'/' || b == b'\\')
+            .map(|segment| segment.split(|&b| b == b';').next().unwrap_or_default())
+            .any(|segment| segment == b"." || segment == b"..")
 }
 
 /// `path` with every valid `%XX` escape decoded, once. Invalid escapes are
@@ -456,6 +459,9 @@ mod tests {
             "/v1/..%5Cv2",
             "/v1\\..\\v2",
             "/v1/..;x/v2",
+            "/v1/%252e%252e/v2",
+            // Decodes once to `%2e%2e`, without any `%25`.
+            "/v1/%%32%65%%32%65/v2",
         ] {
             assert!(may_escape_prefix(path), "{path}");
         }
