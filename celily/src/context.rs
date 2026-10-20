@@ -14,7 +14,12 @@ use crate::util::{
     instance_name,
     is_valid_username,
 };
-use crate::validate::{Forbidden, validate_mount_source, validate_proxy_connect};
+use crate::validate::{
+    Forbidden,
+    canonicalize_in_home,
+    validate_mount_source,
+    validate_proxy_connect,
+};
 
 /// All configuration and runtime state resolved from CLI args, config files,
 /// and host environment before launching the LXD instance.
@@ -180,30 +185,29 @@ pub fn resolve_context(
     }));
 
     // Pre-canonicalize allowlists once so validate_mount_source doesn't
-    // re-canonicalize them for every mount. Non-existent entries are
-    // skipped - they'll be rejected at mount time anyway.
-    let canon_allowed_dirs: Vec<PathBuf> = allowed_dirs
-        .iter()
-        .map(|d| expand_host_tilde(d, home))
-        .filter_map(|d| match d.canonicalize() {
-            Ok(canon) => Some(canon),
-            Err(e) => {
-                tracing::warn!("allowed_dir entry '{}' skipped: {e}", d.display(),);
-                None
-            },
-        })
-        .collect();
-    let canon_allowed_files: Vec<PathBuf> = allowed_files
-        .iter()
-        .map(|f| expand_host_tilde(f, home))
-        .filter_map(|f| match f.canonicalize() {
-            Ok(canon) => Some(canon),
-            Err(e) => {
-                tracing::warn!("allowed_file entry '{}' skipped: {e}", f.display(),);
-                None
-            },
-        })
-        .collect();
+    // re-canonicalize them for every mount. Missing entries are skipped -
+    // mounting them fails anyway. An entry going through a symlink under
+    // $HOME is an error, not a skip: see canonicalize_in_home.
+    let canonicalize_allowlist = |key: &str, entries: &[PathBuf]| -> Result<Vec<PathBuf>> {
+        let mut canonical = Vec::new();
+        for entry in entries {
+            let entry = expand_host_tilde(entry, home);
+            if !entry.exists() {
+                tracing::warn!(
+                    "{key} entry '{}' skipped: missing or inaccessible",
+                    entry.display(),
+                );
+                continue;
+            }
+            canonical.push(
+                canonicalize_in_home(&entry, home_canon)
+                    .with_context(|| format!("invalid {key} entry"))?,
+            );
+        }
+        Ok(canonical)
+    };
+    let canon_allowed_dirs = canonicalize_allowlist("allowed_dirs", allowed_dirs)?;
+    let canon_allowed_files = canonicalize_allowlist("allowed_files", allowed_files)?;
 
     // Build the forbidden-path list once. Paths that do not exist (e.g.
     // ~/.ssh on a machine without SSH keys) are silently skipped.

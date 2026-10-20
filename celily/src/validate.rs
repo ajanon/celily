@@ -78,6 +78,37 @@ impl Forbidden {
     }
 }
 
+/// Canonicalize `path`, refusing it if it goes through a symlink inside
+/// `home` (canonical). A sandbox with write access to a directory there could
+/// swap one of its entries for a symlink, and the next run would follow it
+/// out of the mount, or into an allowlist entry. Symlinks outside `home`
+/// (`/home -> /var/home`) are not the sandbox's to plant, so they are fine.
+///
+/// Ceiling: checked at launch. A sandbox still running from another session
+/// could swap a component between this check and LXD mounting the path.
+pub fn canonicalize_in_home(path: &Path, home: &Path) -> Result<PathBuf> {
+    let absolute =
+        std::path::absolute(path).with_context(|| format!("cannot resolve {}", path.display()))?;
+    for ancestor in absolute.ancestors() {
+        let in_home = || {
+            ancestor
+                .parent()
+                .and_then(|parent| parent.canonicalize().ok())
+                .is_some_and(|parent| is_under_or_eq(&parent, home))
+        };
+        if ancestor.is_symlink() && in_home() {
+            bail!(
+                "{} goes through the symlink {} (symlinks under $HOME are not followed)",
+                path.display(),
+                ancestor.display(),
+            );
+        }
+    }
+    absolute
+        .canonicalize()
+        .with_context(|| format!("cannot resolve {}", path.display()))
+}
+
 /// Validate that a mount source is authorized before binding it into the
 /// container.
 ///
@@ -85,15 +116,17 @@ impl Forbidden {
 ///
 /// 1. At least one of `allowed_dirs` or `allowed_files` must be non-empty (set
 ///    in the config at `allowed_dirs` / `allowed_files`).
-/// 2. The canonical path must pass every entry in `forbidden` - any match
+/// 2. The path must not go through a symlink inside `home`
+///    ([`canonicalize_in_home`]).
+/// 3. The canonical path must pass every entry in `forbidden` - any match
 ///    (exact or subtree, depending on the variant) causes rejection.
-/// 3. The canonical path must be under `home` - mounting outside `$HOME` is
+/// 4. The canonical path must be under `home` - mounting outside `$HOME` is
 ///    rejected.
-/// 4. If the path is a directory, it must be an exact match for an entry in
-///    `allowed_dirs` (which must be pre-canonicalized by the caller). If it is
-///    a file, it must be an exact match for an entry in `allowed_files`
-///    (pre-canonicalized). Subtree matching is intentionally rejected - only
-///    explicitly listed paths can be mounted. Symlinks, sockets, and other
+/// 5. If the path is a directory, it must be an exact match for an entry in
+///    `allowed_dirs` (which the caller must canonicalize with
+///    [`canonicalize_in_home`]). If it is a file, it must be an exact match for
+///    an entry in `allowed_files` (same). Subtree matching is intentionally
+///    rejected - only explicitly listed paths can be mounted. Sockets and other
 ///    special files are rejected.
 pub fn validate_mount_source(
     path: &Path,
@@ -109,9 +142,7 @@ pub fn validate_mount_source(
         );
     }
 
-    let canonical = path
-        .canonicalize()
-        .with_context(|| format!("cannot resolve {}", path.display()))?;
+    let canonical = canonicalize_in_home(path, home)?;
 
     for entry in forbidden {
         entry
@@ -711,6 +742,28 @@ mod tests {
         )
         .unwrap_err();
         assert!(format!("{err:#}").contains("path contains ~/.ssh"));
+    }
+
+    #[test]
+    fn canonicalize_in_home_refuses_symlinks_under_home_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let tmp = canonic_path(dir.path());
+        let home = tmp.join("home");
+        std::fs::create_dir_all(home.join("work/real")).unwrap();
+        std::fs::create_dir_all(home.join(".config/gh")).unwrap();
+        // A sandbox with work/ read-write swaps an allowlisted entry.
+        std::os::unix::fs::symlink(home.join(".config/gh"), home.join("work/swapped")).unwrap();
+        // A symlinked $HOME is not the sandbox's doing.
+        std::os::unix::fs::symlink(&home, tmp.join("home-link")).unwrap();
+
+        let err = canonicalize_in_home(&home.join("work/swapped"), &home).unwrap_err();
+        assert!(format!("{err:#}").contains("goes through the symlink"));
+        let err = canonicalize_in_home(&home.join("work/swapped/hosts.yml"), &home).unwrap_err();
+        assert!(format!("{err:#}").contains("goes through the symlink"));
+        assert_eq!(
+            canonicalize_in_home(&tmp.join("home-link/work/real"), &home).unwrap(),
+            home.join("work/real"),
+        );
     }
 
     /// Cases checked against a real `git submodule update --init`.

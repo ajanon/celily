@@ -284,9 +284,12 @@ container starts:
 	_allowed_dirs_ (for directories) or _allowed_files_ (for files) in
 	the config. Subtrees of allowed directories are not implicitly allowed.
 
-*4. Special files rejected*
-	Symlinks, sockets, and other special files are rejected. Only regular
-	files and directories can be mounted.
+*4. Symlinks and special files rejected*
+	A source, or an allowlist entry, that goes through a symlink under
+	*$HOME* is rejected: a sandbox with write access to its directory
+	could swap it for a symlink to somewhere else, and the next run would
+	follow it. Sockets and other special files are rejected too. Only
+	regular files and directories can be mounted.
 
 These rules exist because the tools run inside the container (e.g. coding
 agents) may execute arbitrary commands. The allowlist is therefore the
