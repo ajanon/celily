@@ -450,6 +450,10 @@ a direct connection to the internet on port 80 or 443, the bridge
 ACL drops the packet. The proxy is the only working path to
 HTTP/HTTPS.
 
+A CONNECT tunnel through the proxy must carry TLS or HTTP: any other
+tunnel (SSH, for example) is closed, whatever its target. Use a TCP
+rule for other protocols.
+
 DNS is always filtered: only the hosts of HTTP rules resolve (path
 prefixes and methods do not apply); every other name gets NXDOMAIN
 without reaching the host resolver.

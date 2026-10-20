@@ -355,6 +355,9 @@ variant to the `Providers` enum.
   `isolation` (NetworkIsolation) so Rust's drop order guarantees the instance is
   deleted before the isolation bridge is torn down. Reordering these fields will
   cause `lxc delete` failures.
+- `CelilyHandler::handle_tunnel` closes every raw tunnel (a CONNECT payload that
+  is neither TLS nor HTTP), even to an allowed host: HTTP rules only allow HTTP
+  requests, and TCP rules bypass the proxy.
 
 ## Read-tool gotchas
 
