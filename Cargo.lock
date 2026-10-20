@@ -405,7 +405,6 @@ dependencies = [
  "bon",
  "bytes",
  "http",
- "nix",
  "proxyapi",
  "rustls",
  "serde",
