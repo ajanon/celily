@@ -6,7 +6,9 @@
 //! - host: case-insensitive, against the request authority. proxelar connects
 //!   upstream to that same authority: the host checked is the host reached.
 //! - path prefixes: the request path starts with one of them, on a segment
-//!   boundary (`/v2` covers `/v2` and `/v2/x`, not `/v20`).
+//!   boundary (`/v2` covers `/v2` and `/v2/x`, not `/v20`), and has no segment
+//!   a server could read as `.` or `..` (`%2e%2e`, `..%2f`, `..;`): those could
+//!   resolve outside the prefix.
 //! - methods: case-insensitive, `GET` and `HEAD` when the rule has none.
 //!
 //! A matching request is counted against the rule's quota (429 once
@@ -161,7 +163,9 @@ fn rule_matches(rule: &NetworkRule, host: &str, path: &str, method: &str) -> boo
     };
     let path_allowed = match path_prefixes.as_deref() {
         None | Some([]) => true,
-        Some(prefixes) => prefixes.iter().any(|p| path_has_prefix(path, p)),
+        Some(prefixes) => {
+            !may_escape_prefix(path) && prefixes.iter().any(|p| path_has_prefix(path, p))
+        },
     };
     let method_allowed = match methods {
         Some(methods) => methods.iter().any(|m| m.eq_ignore_ascii_case(method)),
@@ -177,6 +181,47 @@ fn rule_matches(rule: &NetworkRule, host: &str, path: &str, method: &str) -> boo
 fn path_has_prefix(path: &str, prefix: &str) -> bool {
     path.strip_prefix(prefix)
         .is_some_and(|rest| rest.is_empty() || rest.starts_with('/') || prefix.ends_with('/'))
+}
+
+/// Whether a server could resolve `path` outside a prefix it starts with:
+/// a segment reads as `.` or `..` once percent-decoded, split on `\` as
+/// well as `/`, and cut at `;` (`..;` is `..` to servers that drop path
+/// parameters).
+///
+/// Ceiling: servers folding non-ASCII into dots (U+FF0E, overlong UTF-8
+/// `%c0%ae`) are not covered. Refusing non-ASCII bytes would cover them.
+fn may_escape_prefix(path: &str) -> bool {
+    percent_decode(path)
+        .split(|&b| b == b'/' || b == b'\\')
+        .map(|segment| segment.split(|&b| b == b';').next().unwrap_or_default())
+        .any(|segment| segment == b"." || segment == b"..")
+}
+
+/// `path` with every valid `%XX` escape decoded, once. Invalid escapes are
+/// kept as they are.
+fn percent_decode(path: &str) -> Vec<u8> {
+    let bytes = path.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && let Some(&[hi, lo]) = bytes.get(i + 1..i + 3)
+            && let (Some(hi), Some(lo)) = (hex_digit(hi), hex_digit(lo))
+        {
+            decoded.push((hi << 4) | lo);
+            i += 3;
+        } else {
+            decoded.push(bytes[i]);
+            i += 1;
+        }
+    }
+    decoded
+}
+
+fn hex_digit(byte: u8) -> Option<u8> {
+    char::from(byte)
+        .to_digit(16)
+        .and_then(|digit| u8::try_from(digit).ok())
 }
 
 /// Fixed-window request counter of one rule. Windows are aligned to the
@@ -381,6 +426,50 @@ mod tests {
             "/repos/canonicalevil/x",
             "/repos/canonical"
         ));
+    }
+
+    #[tokio::test]
+    async fn dot_segments_never_match_a_path_prefix() {
+        let rule = NetworkRule::Http {
+            host: "api.example.com".into(),
+            path_prefixes: Some(vec!["/v1/".into()]),
+            auth: None,
+            headers: HashMap::new(),
+            methods: None,
+            quota: None,
+        };
+        let mut h = CelilyHandler::new(vec![rule], HashMap::new());
+        assert!(forwarded(&mut h, "GET", "http://api.example.com/v1/x").await);
+        let s = status(&mut h, "GET", "http://api.example.com/v1/%2e%2e/v2/x").await;
+        assert_eq!(s, Some(StatusCode::FORBIDDEN));
+    }
+
+    #[test]
+    fn dot_segments_may_escape_a_prefix() {
+        for path in [
+            "/v1/../v2",
+            "/v1/x/..",
+            "/v1/./x",
+            "/v1/%2e%2e/v2",
+            "/v1/.%2E/v2",
+            "/v1/..%2fv2",
+            "/v1/..%5Cv2",
+            "/v1\\..\\v2",
+            "/v1/..;x/v2",
+        ] {
+            assert!(may_escape_prefix(path), "{path}");
+        }
+        for path in ["/v1/x", "/v1/...", "/v1/.x", "/v1/x..", "/v1/a%2Fb"] {
+            assert!(!may_escape_prefix(path), "{path}");
+        }
+    }
+
+    #[test]
+    fn percent_decode_decodes_valid_escapes_once() {
+        assert_eq!(percent_decode("/a%2Fb%2e"), b"/a/b.");
+        assert_eq!(percent_decode("%252e"), b"%2e");
+        assert_eq!(percent_decode("%zz%2%"), b"%zz%2%");
+        assert_eq!(percent_decode("%%2e"), b"%.");
     }
 
     #[test]

@@ -490,6 +490,10 @@ more-specific rules first.
 	matches whole path segments -- _/v2_ matches _/v2_ and _/v2/foo_
 	but not _/v20_, and _/v2/_ matches only below _/v2_. The rule
 	matches if the request path starts with any of the listed prefixes.
+	A path with a segment that a server could read as _._ or _.._ never
+	matches, since it could resolve outside the prefix: even percent-encoded
+	(_%2e%2e_), delimited by _%2f_ or a backslash, or followed by
+	_;parameters_.
 	When absent, the entire host is allowed.
 
 *methods* = _[strings]_ (optional)
