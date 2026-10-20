@@ -1,4 +1,3 @@
-use std::net::IpAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -6,7 +5,7 @@ use async_trait::async_trait;
 use super::LxcBackend;
 use super::acl::{self, NetworkAcl, NetworkAclRule, rule_to_cli_args};
 use super::bridge::LxdBridge;
-use crate::backend::{BridgeGuard, CreateBridgeParams, NetworkBackend};
+use crate::backend::{BridgeGuard, BridgeSubnet, CreateBridgeParams, NetworkBackend};
 use crate::command::{AsyncCommandExt, CommandError, CommandExt};
 
 // ---------------------------------------------------------------------------
@@ -25,17 +24,16 @@ impl LxcBackend {
         self.lxc_command().args(["network", "delete", name]).run()
     }
 
-    pub(crate) async fn get_network_ipv4(&self, name: &str) -> Result<IpAddr, CommandError> {
+    pub(crate) async fn get_network_ipv4(&self, name: &str) -> Result<BridgeSubnet, CommandError> {
         let raw = self
             .lxc_command_async()
             .args(["network", "get", name, "ipv4.address"])
             .run_stdout()
             .await?;
-        let ip_str = raw.split('/').next().unwrap_or(&raw);
-        ip_str.parse().map_err(|_| {
+        BridgeSubnet::parse(raw.trim()).ok_or_else(|| {
             CommandError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("invalid gateway IP: {ip_str}"),
+                format!("invalid bridge ipv4.address: {raw}"),
             ))
         })
     }
@@ -138,15 +136,15 @@ impl NetworkBackend for LxcBackend {
         &self,
         name: &str,
         params: &CreateBridgeParams,
-    ) -> Result<(Box<dyn BridgeGuard>, IpAddr), Self::Error> {
+    ) -> Result<(Box<dyn BridgeGuard>, BridgeSubnet), Self::Error> {
         let lxd = Arc::new(self.clone());
 
         // RAII guard in place immediately -- any failure from here on
         // destroys the network on drop.
         let bridge = LxdBridge::create(Arc::clone(&lxd), name, params.keep).await?;
 
-        let gateway_ip = bridge.get_gateway_ip().await?;
-        let gateway_str = gateway_ip.to_string();
+        let subnet = bridge.get_subnet().await?;
+        let gateway_str = subnet.gateway.to_string();
 
         let acl_rules = acl::build_rules_from_params(params, &gateway_str);
 
@@ -168,6 +166,6 @@ impl NetworkBackend for LxcBackend {
         bridge.attach_acl(&acl.name).await?;
 
         let guard = LxdBridgeGuard { bridge, acl };
-        Ok((Box::new(guard), gateway_ip))
+        Ok((Box::new(guard), subnet))
     }
 }

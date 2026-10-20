@@ -1,5 +1,10 @@
 //! HTTP allowlist handler for the in-process proxelar proxy.
 //!
+//! Only the instance is served: the proxy listens on the host's address on
+//! the bridge, which other containers and LAN peers may be able to route to.
+//! Requests from outside the bridge subnet, or from the gateway (the host
+//! itself), get a 403 before any rule is looked at.
+//!
 //! Requests are matched against the HTTP allow rules in order; the first
 //! match wins:
 //!
@@ -38,6 +43,7 @@ use proxyapi::{
 use tracing::warn;
 
 use super::rule::{NetworkRule, QuotaConfig};
+use crate::backend::BridgeSubnet;
 
 /// Methods allowed by a rule that does not list any.
 const DEFAULT_METHODS: [&str; 2] = ["GET", "HEAD"];
@@ -53,15 +59,22 @@ pub(crate) struct CelilyHandler {
     auth_secrets: Arc<HashMap<String, String>>,
     /// Quota state, one entry per rule (same index as `rules`).
     quotas: Arc<[Mutex<QuotaWindow>]>,
+    /// The instance bridge: the only clients served.
+    subnet: BridgeSubnet,
 }
 
 impl CelilyHandler {
-    pub(crate) fn new(rules: Vec<NetworkRule>, auth_secrets: HashMap<String, String>) -> Self {
+    pub(crate) fn new(
+        rules: Vec<NetworkRule>,
+        auth_secrets: HashMap<String, String>,
+        subnet: BridgeSubnet,
+    ) -> Self {
         let quotas = rules.iter().map(|_| Mutex::default()).collect();
         Self {
             rules: rules.into(),
             auth_secrets: Arc::new(auth_secrets),
             quotas,
+            subnet,
         }
     }
 
@@ -78,9 +91,13 @@ impl CelilyHandler {
 impl HttpHandler for CelilyHandler {
     async fn handle_request(
         &mut self,
-        _ctx: &HttpContext,
+        ctx: &HttpContext,
         mut request: ProxyRequest,
     ) -> RequestOrResponse {
+        if !self.subnet.has_instance(ctx.remote_addr.ip()) {
+            warn!(client = %ctx.remote_addr, "refusing a proxy client outside the instance bridge");
+            return self.reject(StatusCode::FORBIDDEN, b"Not a client of this proxy\n");
+        }
         let Some(host) = request.head.uri.host() else {
             return self.reject(StatusCode::BAD_REQUEST, b"request is missing a host\n");
         };
@@ -280,6 +297,10 @@ mod tests {
         ProxyRequest::new(head, ProxyBody::empty())
     }
 
+    fn test_handler(rules: Vec<NetworkRule>, secrets: HashMap<String, String>) -> CelilyHandler {
+        CelilyHandler::new(rules, secrets, BridgeSubnet::parse("10.0.0.1/24").unwrap())
+    }
+
     fn http_rule(host: &str) -> NetworkRule {
         NetworkRule::Http {
             host: host.into(),
@@ -300,7 +321,7 @@ mod tests {
 
     async fn handle(handler: &mut CelilyHandler, method: &str, uri: &str) -> RequestOrResponse {
         let ctx = HttpContext {
-            remote_addr: "127.0.0.1:0".parse().unwrap(),
+            remote_addr: "10.0.0.2:40000".parse().unwrap(),
         };
         handler.handle_request(&ctx, request(method, uri)).await
     }
@@ -319,14 +340,14 @@ mod tests {
 
     #[tokio::test]
     async fn allowed_host_is_forwarded() {
-        let mut h = CelilyHandler::new(vec![http_rule("api.example.com")], HashMap::new());
+        let mut h = test_handler(vec![http_rule("api.example.com")], HashMap::new());
         assert!(forwarded(&mut h, "GET", "http://api.example.com/").await);
         assert!(forwarded(&mut h, "GET", "https://API.Example.com/x").await);
     }
 
     #[tokio::test]
     async fn other_hosts_get_403() {
-        let mut h = CelilyHandler::new(vec![http_rule("api.example.com")], HashMap::new());
+        let mut h = test_handler(vec![http_rule("api.example.com")], HashMap::new());
         let s = status(&mut h, "GET", "http://evil.com/").await;
         assert_eq!(s, Some(StatusCode::FORBIDDEN));
         let s = status(&mut h, "GET", "http://sub.api.example.com/").await;
@@ -335,14 +356,14 @@ mod tests {
 
     #[tokio::test]
     async fn missing_host_gets_400() {
-        let mut h = CelilyHandler::new(vec![http_rule("api.example.com")], HashMap::new());
+        let mut h = test_handler(vec![http_rule("api.example.com")], HashMap::new());
         let s = status(&mut h, "GET", "/").await;
         assert_eq!(s, Some(StatusCode::BAD_REQUEST));
     }
 
     #[tokio::test]
     async fn methods_default_to_get_and_head() {
-        let mut h = CelilyHandler::new(vec![http_rule("api.example.com")], HashMap::new());
+        let mut h = test_handler(vec![http_rule("api.example.com")], HashMap::new());
         assert!(forwarded(&mut h, "HEAD", "http://api.example.com/").await);
         let s = status(&mut h, "POST", "http://api.example.com/").await;
         assert_eq!(s, Some(StatusCode::FORBIDDEN));
@@ -358,7 +379,7 @@ mod tests {
             methods: Some(vec!["post".into()]),
             quota: None,
         };
-        let mut h = CelilyHandler::new(vec![rule], HashMap::new());
+        let mut h = test_handler(vec![rule], HashMap::new());
         assert!(forwarded(&mut h, "POST", "http://api.example.com/").await);
         let s = status(&mut h, "GET", "http://api.example.com/").await;
         assert_eq!(s, Some(StatusCode::FORBIDDEN));
@@ -374,7 +395,7 @@ mod tests {
             methods: None,
             quota: None,
         };
-        let mut h = CelilyHandler::new(vec![rule], HashMap::new());
+        let mut h = test_handler(vec![rule], HashMap::new());
         assert!(forwarded(&mut h, "GET", "http://api.example.com/v3/x").await);
         let s = status(&mut h, "GET", "http://api.example.com/v2/x").await;
         assert_eq!(s, Some(StatusCode::FORBIDDEN));
@@ -390,7 +411,7 @@ mod tests {
             methods: None,
             quota: Some(hourly(1)),
         };
-        let mut h = CelilyHandler::new(vec![narrow, http_rule("api.example.com")], HashMap::new());
+        let mut h = test_handler(vec![narrow, http_rule("api.example.com")], HashMap::new());
         assert!(forwarded(&mut h, "GET", "http://api.example.com/v1/x").await);
         // The narrow rule matches first: its quota applies, no fallthrough.
         let s = status(&mut h, "GET", "http://api.example.com/v1/x").await;
@@ -409,7 +430,7 @@ mod tests {
             methods: None,
             quota: Some(hourly(2)),
         };
-        let mut h = CelilyHandler::new(vec![rule], HashMap::new());
+        let mut h = test_handler(vec![rule], HashMap::new());
         let mut clone = h.clone();
         assert!(forwarded(&mut h, "GET", "http://api.example.com/").await);
         assert!(forwarded(&mut clone, "GET", "http://api.example.com/").await);
@@ -441,7 +462,7 @@ mod tests {
             methods: None,
             quota: None,
         };
-        let mut h = CelilyHandler::new(vec![rule], HashMap::new());
+        let mut h = test_handler(vec![rule], HashMap::new());
         assert!(forwarded(&mut h, "GET", "http://api.example.com/v1/x").await);
         let s = status(&mut h, "GET", "http://api.example.com/v1/%2e%2e/v2/x").await;
         assert_eq!(s, Some(StatusCode::FORBIDDEN));
@@ -508,7 +529,7 @@ mod tests {
             quota: None,
         };
         let secrets = HashMap::from([("token".into(), "s3cret".into())]);
-        let mut h = CelilyHandler::new(vec![rule], secrets);
+        let mut h = test_handler(vec![rule], secrets);
         let RequestOrResponse::Request(r) = handle(&mut h, "GET", "http://api.example.com/").await
         else {
             panic!("expected the request to be forwarded");
@@ -522,12 +543,29 @@ mod tests {
 
     #[tokio::test]
     async fn raw_tunnels_are_closed_even_to_allowed_hosts() {
-        let mut h = CelilyHandler::new(vec![http_rule("api.example.com")], HashMap::new());
+        let mut h = test_handler(vec![http_rule("api.example.com")], HashMap::new());
         let ctx = HttpContext {
-            remote_addr: "127.0.0.1:0".parse().unwrap(),
+            remote_addr: "10.0.0.2:40000".parse().unwrap(),
         };
         let authority = Authority::from_static("api.example.com:22");
         let decision = h.handle_tunnel(&ctx, &authority).await;
         assert_eq!(decision, TunnelDecision::Close);
+    }
+
+    #[tokio::test]
+    async fn clients_outside_the_bridge_get_403() {
+        let mut h = test_handler(vec![http_rule("api.example.com")], HashMap::new());
+        for client in ["10.0.0.1:40000", "10.0.1.2:40000", "127.0.0.1:40000"] {
+            let ctx = HttpContext {
+                remote_addr: client.parse().unwrap(),
+            };
+            let response = h
+                .handle_request(&ctx, request("GET", "https://api.example.com/"))
+                .await;
+            let RequestOrResponse::Response(r) = response else {
+                panic!("{client} was served");
+            };
+            assert_eq!(r.head.status, StatusCode::FORBIDDEN);
+        }
     }
 }

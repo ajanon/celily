@@ -316,7 +316,9 @@ an egress ACL that blocks all TCP traffic except connections to a
 per-instance proxy running inside the *celily* process. The proxy
 enforces an allowlist of permitted hosts and optional path prefixes,
 and injects authentication headers where configured (see _auth_ in
-*celily-config*(5)).
+*celily-config*(5)). The proxy listens on the host's address on the
+bridge, and only serves the instance: requests from anywhere else, other
+containers included, get a 403.
 *HTTP_PROXY*, *HTTPS_PROXY*, *NODE_USE_ENV_PROXY* and *NODE_USE_SYSTEM_CA*
 are forcibly injected so that proxy-aware tools work transparently.
 Tools that ignore the proxy environment variables simply cannot reach

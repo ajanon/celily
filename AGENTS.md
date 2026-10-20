@@ -79,7 +79,9 @@ dedicated bridge with an egress ACL and two per-instance proxies running
 in-process on the celily runtime (proxelar's `proxyapi`, see
 `celily-lib/src/network/proxelar.rs`): an HTTP forward proxy and a DNS proxy,
 both bound to the bridge gateway. HTTP rules (`type = "http"`) are enforced by
-`CelilyHandler` (`network/handler.rs`). TCP rules (`type = "tcp"`) are enforced
+`CelilyHandler` (`network/handler.rs`), which serves only clients in the bridge
+subnet (`BridgeSubnet::has_instance`): the gateway is a host address other
+containers and LAN peers may route to. TCP rules (`type = "tcp"`) are enforced
 at the bridge ACL (nftables) level and bypass the proxy entirely. The CA is
 generated per instance in a 0700 directory under `$XDG_RUNTIME_DIR`, removed
 when `ProxelarGuard` drops. The CA cert is pushed into the instance once systemd

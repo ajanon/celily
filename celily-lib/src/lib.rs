@@ -10,6 +10,7 @@ pub mod util;
 
 pub use backend::{
     BridgeGuard,
+    BridgeSubnet,
     CreateBridgeParams,
     Device,
     InstanceBackend,

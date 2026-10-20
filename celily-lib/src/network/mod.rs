@@ -53,7 +53,7 @@ impl NetworkIsolation {
         allow: &[NetworkRule],
         provider: Option<&dyn SecretProvider<Error = SecretError>>,
     ) -> Result<(Self, String), NetworkError> {
-        let (bridge_guard, gateway_ip) = backend
+        let (bridge_guard, subnet) = backend
             .create_bridge(bridge_name, params)
             .await
             .map_err(|e| NetworkError::Backend(Box::new(e)))?;
@@ -75,12 +75,12 @@ impl NetworkIsolation {
         }
 
         let (proxy, ca_cert) =
-            ProxelarGuard::start(bridge_name, gateway_ip, allow.to_vec(), auth_secrets).await?;
+            ProxelarGuard::start(bridge_name, subnet, allow.to_vec(), auth_secrets).await?;
 
         Ok((
             Self {
                 proxy,
-                gateway_ip,
+                gateway_ip: IpAddr::V4(subnet.gateway),
                 bridge_guard,
             },
             ca_cert,

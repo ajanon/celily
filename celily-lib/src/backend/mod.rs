@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
@@ -149,6 +149,41 @@ pub trait BridgeGuard: Send + Sync {
     // Drop handles teardown.
 }
 
+/// A bridge's IPv4 gateway and subnet prefix length, as in `10.0.0.1/24`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeSubnet {
+    /// The gateway: the host's own address on the bridge.
+    pub gateway: Ipv4Addr,
+    /// Prefix length of the subnet, at most 32.
+    pub prefix_len: u8,
+}
+
+impl BridgeSubnet {
+    /// Parse `<gateway>/<prefix length>`, LXD's `ipv4.address` format.
+    #[must_use]
+    pub fn parse(cidr: &str) -> Option<Self> {
+        let (gateway, prefix_len) = cidr.split_once('/')?;
+        let prefix_len = prefix_len.parse().ok().filter(|&len| len <= 32)?;
+        Some(Self {
+            gateway: gateway.parse().ok()?,
+            prefix_len,
+        })
+    }
+
+    /// Whether `ip` can be an instance on this bridge: in the subnet, and
+    /// not the gateway, which is the host itself.
+    #[must_use]
+    pub fn has_instance(&self, ip: IpAddr) -> bool {
+        let IpAddr::V4(ip) = ip.to_canonical() else {
+            return false;
+        };
+        let mask = u32::MAX
+            .checked_shl(32 - u32::from(self.prefix_len))
+            .unwrap_or(0);
+        ip != self.gateway && (ip.to_bits() ^ self.gateway.to_bits()) & mask == 0
+    }
+}
+
 /// Manages per-instance network isolation bridges.
 #[async_trait]
 pub trait NetworkBackend: Send + Sync {
@@ -156,12 +191,12 @@ pub trait NetworkBackend: Send + Sync {
     type Error: std::error::Error + Send + Sync + 'static;
 
     /// Create an isolated bridge and return a guard that deletes it on drop,
-    /// along with the bridge's gateway IP.
+    /// along with the bridge's subnet.
     async fn create_bridge(
         &self,
         name: &str,
         params: &CreateBridgeParams,
-    ) -> Result<(Box<dyn BridgeGuard>, IpAddr), Self::Error>;
+    ) -> Result<(Box<dyn BridgeGuard>, BridgeSubnet), Self::Error>;
 }
 
 /// A single TCP allow rule for the bridge egress ACL.
@@ -184,4 +219,27 @@ pub struct CreateBridgeParams {
     pub dns_port: u16,
     /// TCP allow rules for the bridge egress ACL.
     pub allow_tcp: Vec<TcpAllow>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bridge_subnet_has_its_instances_only() {
+        let subnet = BridgeSubnet::parse("10.35.140.1/24").unwrap();
+        let has = |ip: &str| subnet.has_instance(ip.parse().unwrap());
+        assert!(has("10.35.140.2"));
+        assert!(has("::ffff:10.35.140.200"));
+        assert!(!has("10.35.140.1"), "the gateway is the host");
+        assert!(!has("10.35.141.2"));
+        assert!(!has("127.0.0.1"));
+        assert!(!has("fd42::2"));
+
+        let host_only = BridgeSubnet::parse("10.0.0.1/32").unwrap();
+        assert!(!host_only.has_instance("10.0.0.2".parse().unwrap()));
+        for invalid in ["10.0.0.1", "10.0.0.1/33", "fd42::1/64", "none"] {
+            assert_eq!(BridgeSubnet::parse(invalid), None, "{invalid}");
+        }
+    }
 }

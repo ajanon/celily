@@ -26,6 +26,7 @@ use super::handler::CelilyHandler;
 use super::params::{DNS_PORT, PROXY_PORT};
 use super::rule::NetworkRule;
 use crate::CleanupDir;
+use crate::backend::BridgeSubnet;
 
 /// How long the HTTP proxy gets to start accepting connections.
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
@@ -100,13 +101,14 @@ pub struct ProxelarGuard {
 }
 
 impl ProxelarGuard {
-    /// Start the HTTP and DNS proxies on `gateway_ip`, enforcing `rules`.
+    /// Start the HTTP and DNS proxies on the gateway of `subnet`, enforcing
+    /// `rules` for the clients of `subnet`.
     ///
     /// Returns once the HTTP proxy accepts connections, with the
     /// PEM-encoded CA certificate the instance must trust.
     pub(crate) async fn start(
         bridge_name: &str,
-        gateway_ip: IpAddr,
+        subnet: BridgeSubnet,
         rules: Vec<NetworkRule>,
         auth_secrets: HashMap<String, String>,
     ) -> Result<(Self, String), ProxelarError> {
@@ -116,6 +118,7 @@ impl ProxelarGuard {
         // one is installed already.
         let _ = rustls::crypto::ring::default_provider().install_default();
 
+        let gateway_ip = IpAddr::V4(subnet.gateway);
         let dns_upstream = SocketAddr::new(host_nameserver()?, 53);
         let runtime_dir = env::var_os("XDG_RUNTIME_DIR").ok_or(ProxelarError::MissingEnv {
             var: "XDG_RUNTIME_DIR",
@@ -141,7 +144,7 @@ impl ProxelarGuard {
             ProxyMode::Forward,
             &ca_dir,
         ));
-        let http_handler = CelilyHandler::new(rules.clone(), auth_secrets);
+        let http_handler = CelilyHandler::new(rules.clone(), auth_secrets, subnet);
         let http = tokio::spawn(async move {
             http_proxy
                 .start_with_handler(http_handler, future::pending())
