@@ -208,8 +208,10 @@ set. It is skipped by *git fetch --all*.
 
 Nothing is fetched automatically. The remote is removed when *celily*
 exits; commits that were not fetched by then are lost with the instance.
-If *celily* is killed, a stale remote may remain; fetching from it fails,
-and the next run with the same name replaces it. A remote of that name
+If *celily* is killed, its cleanup does not run: the remote remains, and
+so does the instance, still running (see *Cleanup* below). Fetching from
+the remote works for as long as the instance does. The next run with the
+same name replaces the remote. A remote of that name
 whose URL is not an *ext::* one is never replaced: the run fails instead.
 
 *git fetch* refuses to update a branch that is checked out in one of the
@@ -301,6 +303,14 @@ All configuration lives in *$XDG_CONFIG_HOME/celily/*, which is always
 blocked from bind-mounts. There is no per-project config file and no
 environment variable that can redirect the config path.
 
+## What a mount exposes
+
+A mount exposes the whole directory, read-only or not: untracked and
+ignored files (*.env*, local credentials, build output) and, in a
+repository, all of *.git*: remote URLs (some embed credentials), stashes,
+the reflog, and every local branch. Worktree mode mounts the project the
+same way. Keep secrets out of mounted directories.
+
 ## Read-write mounts
 
 Mounts are read-only unless set otherwise. In a read-write repository,
@@ -320,13 +330,23 @@ and injects authentication headers where configured (see _auth_ in
 bridge, and only serves the instance: requests from anywhere else, other
 containers included, get a 403.
 *HTTP_PROXY*, *HTTPS_PROXY*, *NODE_USE_ENV_PROXY* and *NODE_USE_SYSTEM_CA*
-are forcibly injected so that proxy-aware tools work transparently.
-Tools that ignore the proxy environment variables simply cannot reach
-the internet on ports 80 or 443 -- the bridge ACL drops their packets.
+are forcibly injected so that proxy-aware tools work transparently. They
+are a convenience, not the boundary: a process can drop them. Tools that
+ignore them reach nothing -- the bridge ACL rejects every TCP connection
+but those to the proxy and to TCP rules.
 
 Instances are created without any LXD/Incus profile: a profile could
 add a network interface outside the isolation bridge, extra devices, or
 raw configuration. Every device of the instance comes from *celily*.
+
+## Cleanup
+
+The instance, its bridge, and its ACL are deleted when *celily* exits.
+*celily* does not handle signals: if it is killed (closing its terminal
+is enough), the instance keeps running, with its mounts and the TCP
+rules of its ACL; only the proxy, which runs inside *celily*, is gone.
+Delete it with *lxc delete --force* _NAME_, and the bridge and ACL with
+*lxc network delete* and *lxc network acl delete*.
 
 ## Disk exhaustion
 

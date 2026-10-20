@@ -88,7 +88,8 @@ generated per instance in a 0700 directory under `$XDG_RUNTIME_DIR`, removed
 when `ProxelarGuard` drops. The CA cert is pushed into the instance once systemd
 is up (`lxc file push`, then a trust store rebuild), and
 `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` are injected into `lxc exec` *after*
-user-specified env vars so they cannot be overridden. `Instance<Running>` holds
+user-specified env vars so config cannot override them by mistake (the sandbox
+can always drop them: the bridge ACL is the boundary). `Instance<Running>` holds
 both `InstanceGuard` and `NetworkIsolation` with field declaration order
 guaranteeing the instance is deleted before the bridge is torn down.
 
@@ -283,8 +284,8 @@ Notable fields (all at top level; no `[common]` / `[run]` nesting):
 - `[worktree]` -- worktree mode configuration (user_name, user_email)
 - `pre_run` -- inline script run before the main command; one per file, all of
   them run (default first), first failure aborts
-- `notifications` -- whether to bind-mount the notification proxy socket
-  (default: true)
+- `[[proxy]]` -- Unix socket proxy devices (host socket, listening in the
+  instance); see `celily-config.5`
 
 ### Profiles and profiles.toml
 
@@ -319,8 +320,9 @@ the same key. CLI `--env` is the highest priority.
 
 **Proxy env vars** (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`) are injected at the
 highest priority -- they override `--env`, `--pass-env`, and `env`/`pass_env`
-entries with the same key. This is intentional: if the agent could override the
-proxy it could bypass isolation.
+entries with the same key. This is a convenience, not a security property: any
+process can drop them. The bridge ACL, which only lets TCP reach the proxy and
+TCP rules, is what keeps traffic on the proxy.
 
 ## Secrets handling
 
