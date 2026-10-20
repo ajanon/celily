@@ -120,6 +120,7 @@ mod tests {
             allow: vec![NetworkRule::Http {
                 scheme: HttpScheme::Https,
                 host: "api.example.com".into(),
+                ports: vec![443],
                 path_prefixes: None,
                 auth: None,
                 headers: std::collections::HashMap::new(),

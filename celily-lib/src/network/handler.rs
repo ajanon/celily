@@ -11,6 +11,9 @@
 //! - scheme: an `Http` rule matches plain HTTP requests, an `Https` rule TLS
 //!   ones. proxelar sets the scheme from the client connection, and uses TLS
 //!   upstream exactly when the client did.
+//! - port: one of the rule's, a request without a port going to the default
+//!   port of its scheme. Same authority as the host: the port checked is the
+//!   port reached.
 //! - host: case-insensitive, against the request authority. proxelar connects
 //!   upstream to that same authority: the host checked is the host reached.
 //! - path prefixes: the request path starts with one of them, on a segment
@@ -133,12 +136,17 @@ impl HttpHandler for CelilyHandler {
                 b"Method override headers are not allowed\n",
             );
         }
+        let port = request
+            .head
+            .uri
+            .port_u16()
+            .unwrap_or_else(|| scheme.default_port());
         let path = request.head.uri.path();
         let method = request.head.method.as_str();
         let Some(index) = self
             .rules
             .iter()
-            .position(|rule| rule_matches(rule, scheme, host, path, method))
+            .position(|rule| rule_matches(rule, scheme, host, port, path, method))
         else {
             return self.reject(StatusCode::FORBIDDEN, b"Blocked by network policy\n");
         };
@@ -204,12 +212,14 @@ fn rule_matches(
     rule: &NetworkRule,
     scheme: HttpScheme,
     host: &str,
+    port: u16,
     path: &str,
     method: &str,
 ) -> bool {
     let NetworkRule::Http {
         scheme: rule_scheme,
         host: rule_host,
+        ports,
         path_prefixes,
         methods,
         ..
@@ -229,7 +239,11 @@ fn rule_matches(
             .iter()
             .any(|m| m.eq_ignore_ascii_case(method)),
     };
-    scheme == *rule_scheme && host.eq_ignore_ascii_case(rule_host) && path_allowed && method_allowed
+    scheme == *rule_scheme
+        && host.eq_ignore_ascii_case(rule_host)
+        && ports.contains(&port)
+        && path_allowed
+        && method_allowed
 }
 
 /// Whether `path` is `prefix` or below it: the prefix must end on a
@@ -348,6 +362,7 @@ mod tests {
         NetworkRule::Http {
             scheme,
             host: host.into(),
+            ports: vec![scheme.default_port()],
             path_prefixes: None,
             auth: None,
             headers: HashMap::new(),
@@ -406,6 +421,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rules_match_their_ports_only() {
+        let mut alt = scheme_rule(HttpScheme::Https, "alt.example.com");
+        if let NetworkRule::Http { ports, .. } = &mut alt {
+            *ports = vec![8443];
+        }
+        let rules = vec![scheme_rule(HttpScheme::Https, "api.example.com"), alt];
+        let mut h = test_handler(rules, HashMap::new());
+        for uri in [
+            "https://api.example.com/",
+            "https://api.example.com:443/",
+            "https://alt.example.com:8443/",
+        ] {
+            assert!(forwarded(&mut h, "GET", uri).await, "{uri}");
+        }
+        for uri in [
+            "https://api.example.com:8443/",
+            "https://api.example.com:80/",
+            "https://alt.example.com/",
+        ] {
+            let s = status(&mut h, "GET", uri).await;
+            assert_eq!(s, Some(StatusCode::FORBIDDEN), "{uri}");
+        }
+    }
+
+    #[tokio::test]
     async fn rules_match_their_scheme_only() {
         let rules = vec![
             scheme_rule(HttpScheme::Https, "tls.example.com"),
@@ -437,6 +477,7 @@ mod tests {
         let rule = NetworkRule::Http {
             scheme: HttpScheme::Https,
             host: "api.example.com".into(),
+            ports: vec![443],
             path_prefixes: None,
             auth: None,
             headers: HashMap::new(),
@@ -454,6 +495,7 @@ mod tests {
         let rule = NetworkRule::Http {
             scheme: HttpScheme::Https,
             host: "api.example.com".into(),
+            ports: vec![443],
             path_prefixes: Some(vec!["/v1/".into(), "/v3/".into()]),
             auth: None,
             headers: HashMap::new(),
@@ -471,6 +513,7 @@ mod tests {
         let narrow = NetworkRule::Http {
             scheme: HttpScheme::Https,
             host: "api.example.com".into(),
+            ports: vec![443],
             path_prefixes: Some(vec!["/v1/".into()]),
             auth: None,
             headers: HashMap::new(),
@@ -491,6 +534,7 @@ mod tests {
         let rule = NetworkRule::Http {
             scheme: HttpScheme::Https,
             host: "api.example.com".into(),
+            ports: vec![443],
             path_prefixes: None,
             auth: None,
             headers: HashMap::new(),
@@ -524,6 +568,7 @@ mod tests {
         let rule = NetworkRule::Http {
             scheme: HttpScheme::Https,
             host: "api.example.com".into(),
+            ports: vec![443],
             path_prefixes: Some(vec!["/v1/".into()]),
             auth: None,
             headers: HashMap::new(),
@@ -584,6 +629,7 @@ mod tests {
         let rule = NetworkRule::Http {
             scheme: HttpScheme::Https,
             host: "api.example.com".into(),
+            ports: vec![443],
             path_prefixes: None,
             auth: Some(AuthConfig {
                 secret: "token".into(),
@@ -643,6 +689,7 @@ mod tests {
         let rule = NetworkRule::Http {
             scheme: HttpScheme::Https,
             host: "api.example.com".into(),
+            ports: vec![443],
             path_prefixes: None,
             auth: None,
             headers: HashMap::new(),

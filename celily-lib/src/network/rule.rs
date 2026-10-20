@@ -46,6 +46,17 @@ pub enum HttpScheme {
     Https,
 }
 
+impl HttpScheme {
+    /// The port of a URL with this scheme and none given: 80 or 443.
+    #[must_use]
+    pub fn default_port(self) -> u16 {
+        match self {
+            Self::Http => 80,
+            Self::Https => 443,
+        }
+    }
+}
+
 /// A single network isolation rule.
 ///
 /// Rules are checked in config-file order; first match wins. Anything
@@ -62,6 +73,9 @@ pub enum NetworkRule {
         /// Only requests of this scheme match the rule.
         scheme: HttpScheme,
         host: String,
+        /// Only requests to one of these ports match the rule. A request
+        /// without a port is to the default port of its scheme.
+        ports: Vec<u16>,
         /// Path prefixes the request path must start with. When absent,
         /// all paths match; an empty list matches none.
         path_prefixes: Option<Vec<String>>,

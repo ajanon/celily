@@ -72,6 +72,7 @@ mod tests {
         NetworkRule::Http {
             scheme: HttpScheme::Https,
             host: host.into(),
+            ports: vec![443],
             path_prefixes: None,
             auth: None,
             headers: HashMap::new(),

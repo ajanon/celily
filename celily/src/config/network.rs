@@ -47,6 +47,8 @@ pub enum ConfigNetworkRule {
 pub struct ConfigHttpRule {
     host: String,
     #[serde(default)]
+    ports: Option<Vec<u16>>,
+    #[serde(default)]
     path_prefixes: Option<Vec<String>>,
     #[serde(default)]
     auth: Option<AuthConfig>,
@@ -73,6 +75,7 @@ impl ConfigHttpRule {
     fn into_library(self, scheme: HttpScheme) -> Result<NetworkRule, ConfigError> {
         let Self {
             host,
+            ports,
             path_prefixes,
             auth,
             headers,
@@ -89,9 +92,22 @@ impl ConfigHttpRule {
                 )));
             }
         }
+        if ports.as_ref().is_some_and(Vec::is_empty) {
+            return Err(ConfigError::Validation(format!(
+                "allow rule for {host}: ports is empty (leave it out for the default)"
+            )));
+        }
+        // `host:port` would never match: the port is not part of the host
+        // a request is matched on. A bracketed IPv6 literal has colons.
+        if host.contains(':') && !host.ends_with(']') {
+            return Err(ConfigError::Validation(format!(
+                "allow rule for {host}: host has a port, list it in `ports` instead"
+            )));
+        }
         let quota = quota.map(ConfigQuotaConfig::into_library).transpose()?;
         Ok(NetworkRule::Http {
             scheme,
+            ports: ports.unwrap_or_else(|| vec![scheme.default_port()]),
             host,
             path_prefixes,
             auth,
@@ -199,8 +215,29 @@ quota = { max_requests = 0, window = "1h" }
     }
 
     #[test]
+    fn ports_default_to_the_scheme_port() {
+        let ports = |rule: &str| {
+            let nc: NetworkConfig = toml::from_str(&format!("[[allow]]\n{rule}\n")).unwrap();
+            let rule = nc.allow.into_iter().next().unwrap().into_library();
+            match rule {
+                Ok(NetworkRule::Http { ports, .. }) => Ok(ports),
+                Ok(_) => panic!("expected an HTTP rule"),
+                Err(e) => Err(e.to_string()),
+            }
+        };
+        assert_eq!(ports("type = \"https\"\nhost = \"a\""), Ok(vec![443]));
+        assert_eq!(ports("type = \"http\"\nhost = \"a\""), Ok(vec![80]));
+        let rule = "type = \"http\"\nhost = \"a\"\nports = [80, 8080]";
+        assert_eq!(ports(rule), Ok(vec![80, 8080]));
+        let rule = "type = \"https\"\nhost = \"[fd00::1]\"";
+        assert_eq!(ports(rule), Ok(vec![443]));
+        let err = ports("type = \"https\"\nhost = \"a:8443\"").unwrap_err();
+        assert!(err.contains("host has a port"), "{err}");
+    }
+
+    #[test]
     fn rejects_empty_lists() {
-        for key in ["path_prefixes", "methods"] {
+        for key in ["path_prefixes", "methods", "ports"] {
             let toml = format!("[[allow]]\ntype = \"http\"\nhost = \"a.example\"\n{key} = []\n");
             let nc: NetworkConfig = toml::from_str(&toml).unwrap();
             let rule = nc.allow.into_iter().next().unwrap();

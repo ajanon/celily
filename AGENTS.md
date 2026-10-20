@@ -280,8 +280,9 @@ Notable fields (all at top level; no `[common]` / `[run]` nesting):
   passed through)
 - `[network]` -- network isolation config (allow); `allow` rules use a `type`
   discriminator (`"https"`, `"http"` or `"tcp"`). HTTP(S) rules match their own
-  scheme only, and are enforced by the in-process proxy; TCP rules by the bridge
-  egress ACL. See `celily-config.5` for full schema.
+  scheme and `ports` only (default: 443 or 80), and are enforced by the
+  in-process proxy; TCP rules by the bridge egress ACL. See `celily-config.5`
+  for full schema.
 - `[worktree]` -- worktree mode configuration (user_name, user_email)
 - `pre_run` -- inline script run before the main command; one per file, all of
   them run (default first), first failure aborts
