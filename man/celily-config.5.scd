@@ -459,7 +459,7 @@ A CONNECT tunnel through the proxy must carry TLS or HTTP: any other
 tunnel (SSH, for example) is closed, whatever its target. Use a TCP
 rule for other protocols.
 
-DNS is always filtered: only the hosts of HTTP rules resolve (path
+DNS is always filtered: only the hosts of HTTP(S) rules resolve (path
 prefixes and methods do not apply); every other name gets NXDOMAIN
 without reaching the host resolver.
 
@@ -480,10 +480,16 @@ more-specific rules first.
 
 *type* = _string_ (required)
 	Rule type. Supported values:
-	- *"http"* -- HTTP/HTTPS host rules (see below). Enforced by the per-instance proxy.
+	- *"https"* -- HTTPS host rules (see below). Enforced by the per-instance proxy.
+	- *"http"* -- Plain HTTP host rules, same keys. Enforced by the per-instance proxy.
 	- *"tcp"* -- Raw TCP destination rules (see TCP RULES below). Enforced by the bridge egress ACL (nftables).
 
-*HTTP rules* (type = "http")
+*HTTP rules* (type = "https" or "http")
+
+An *https* rule matches only HTTPS requests: TLS from the container to
+the proxy, then verified TLS from the proxy to the host. An *http* rule
+matches only plain HTTP requests, which leave the host unencrypted --
+including the header of _auth_, if set. Allowing both takes two rules.
 
 *host* = _string_ (required)
 	Hostname to allow (e.g. *api.example.com*). Matched,
@@ -517,7 +523,7 @@ more-specific rules first.
 Example with non-default methods:
 ```
 [[network.allow]]
-type = "http"
+type = "https"
 host = "api.example.com"
 methods = ["GET", "HEAD", "POST", "PUT"]
 ```
@@ -569,7 +575,7 @@ resets when the bucket rolls over.
 Example:
 ```
 [[network.allow]]
-type = "http"
+type = "https"
 host = "api.openai.com"
 quota = { max_requests = 1000, window = "1h" }
 ```
@@ -598,12 +604,12 @@ Example:
 [network]
 
 [[network.allow]]
-type = "http"
+type = "https"
 host = "api.github.com"
 methods = ["GET", "HEAD"]
 
 [[network.allow]]
-type = "http"
+type = "https"
 host = "api.openai.com"
 path_prefixes = ["/v1"]
 headers = { "User-Agent" = "celily/1.0" }
@@ -611,7 +617,7 @@ auth = { secret = "openai-api-key", header = "Authorization", prefix = "Bearer "
 quota = { max_requests = 1000, window = "1h" }
 
 [[network.allow]]
-type = "http"
+type = "https"
 host = "docs.github.com"
 
 [[network.allow]]

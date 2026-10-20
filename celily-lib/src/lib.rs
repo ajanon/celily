@@ -32,6 +32,7 @@ pub use limits::Limits;
 pub use mount::{AccessMode, Mount};
 pub use network::{
     AuthConfig,
+    HttpScheme,
     NetworkError,
     NetworkIsolation,
     NetworkParams,

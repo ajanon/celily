@@ -83,7 +83,7 @@ Optional:
 
    # Allow GitHub Copilot API endpoints.
    [[network.allow]]
-   type = "http"
+   type = "https"
    host = "api.business.githubcopilot.com"
    path_prefixes = [
        "/chat/completions",
@@ -155,7 +155,9 @@ per-instance MITM proxy.
   HTTP_PROXY and HTTPS_PROXY).
 - A per-instance proxy, running inside the celily process
   ([proxelar](https://github.com/emanuele-em/proxelar)), enforces an HTTP
-  host/path allowlist and injects authentication headers where configured.
+  host/path allowlist and injects authentication headers where configured. HTTPS
+  and plain HTTP are allowed by separate rule types: a secret only crosses the
+  network in cleartext if a plain HTTP rule says so.
 - TCP rules allow raw connections to specific IP/port
 - DNS filtering is on by default: the proxy only resolves the hosts on the same
   allowlist as HTTP.

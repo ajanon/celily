@@ -9,7 +9,7 @@ use std::net::IpAddr;
 
 pub use params::NetworkParams;
 pub use proxelar::{ProxelarError, ProxelarGuard};
-pub use rule::{AuthConfig, NetworkRule, QuotaConfig};
+pub use rule::{AuthConfig, HttpScheme, NetworkRule, QuotaConfig};
 
 use crate::backend::{BridgeGuard, CreateBridgeParams, NetworkBackend};
 use crate::secrets::{SecretError, SecretProvider};

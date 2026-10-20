@@ -79,19 +79,20 @@ declaration order.
 dedicated bridge with an egress ACL and two per-instance proxies running
 in-process on the celily runtime (proxelar's `proxyapi`, see
 `celily-lib/src/network/proxelar.rs`): an HTTP forward proxy and a DNS proxy,
-both bound to the bridge gateway. HTTP rules (`type = "http"`) are enforced by
-`CelilyHandler` (`network/handler.rs`), which serves only clients in the bridge
-subnet (`BridgeSubnet::has_instance`): the gateway is a host address other
-containers and LAN peers may route to. TCP rules (`type = "tcp"`) are enforced
-at the bridge ACL (nftables) level and bypass the proxy entirely. The CA is
-generated per instance in a 0700 directory under `$XDG_RUNTIME_DIR`, removed
-when `ProxelarGuard` drops. The CA cert is pushed into the instance once systemd
-is up (`lxc file push`, then a trust store rebuild), and
-`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` are injected into `lxc exec` *after*
-user-specified env vars so config cannot override them by mistake (the sandbox
-can always drop them: the bridge ACL is the boundary). `Instance<Running>` holds
-both `InstanceGuard` and `NetworkIsolation` with field declaration order
-guaranteeing the instance is deleted before the bridge is torn down.
+both bound to the bridge gateway. HTTP rules (`type = "https"` or `"http"`, one
+scheme each) are enforced by `CelilyHandler` (`network/handler.rs`), which
+serves only clients in the bridge subnet (`BridgeSubnet::has_instance`): the
+gateway is a host address other containers and LAN peers may route to. TCP rules
+(`type = "tcp"`) are enforced at the bridge ACL (nftables) level and bypass the
+proxy entirely. The CA is generated per instance in a 0700 directory under
+`$XDG_RUNTIME_DIR`, removed when `ProxelarGuard` drops. The CA cert is pushed
+into the instance once systemd is up (`lxc file push`, then a trust store
+rebuild), and `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` are injected into `lxc exec`
+*after* user-specified env vars so config cannot override them by mistake (the
+sandbox can always drop them: the bridge ACL is the boundary).
+`Instance<Running>` holds both `InstanceGuard` and `NetworkIsolation` with field
+declaration order guaranteeing the instance is deleted before the bridge is torn
+down.
 
 **DNS filtering**: always on, no config toggle. The bridge ACL restricts DNS to
 the gateway only and the bridge's built-in dnsmasq is configured via
@@ -278,9 +279,9 @@ Notable fields (all at top level; no `[common]` / `[run]` nesting):
   network_ingress, network_egress (container-only limits warn on VMs but are
   passed through)
 - `[network]` -- network isolation config (allow); `allow` rules use a `type`
-  discriminator (`"http"` or `"tcp"`). HTTP rules are enforced by the in-process
-  proxy; TCP rules by the bridge egress ACL. See `celily-config.5` for full
-  schema.
+  discriminator (`"https"`, `"http"` or `"tcp"`). HTTP(S) rules match their own
+  scheme only, and are enforced by the in-process proxy; TCP rules by the bridge
+  egress ACL. See `celily-config.5` for full schema.
 - `[worktree]` -- worktree mode configuration (user_name, user_email)
 - `pre_run` -- inline script run before the main command; one per file, all of
   them run (default first), first failure aborts

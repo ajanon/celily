@@ -63,12 +63,14 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
+    use crate::network::rule::HttpScheme;
 
     const A: u16 = 1;
     const AAAA: u16 = 28;
 
     fn http_rule(host: &str) -> NetworkRule {
         NetworkRule::Http {
+            scheme: HttpScheme::Https,
             host: host.into(),
             path_prefixes: None,
             auth: None,

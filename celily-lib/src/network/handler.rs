@@ -8,6 +8,9 @@
 //! Requests are matched against the HTTP allow rules in order; the first
 //! match wins:
 //!
+//! - scheme: an `Http` rule matches plain HTTP requests, an `Https` rule TLS
+//!   ones. proxelar sets the scheme from the client connection, and uses TLS
+//!   upstream exactly when the client did.
 //! - host: case-insensitive, against the request authority. proxelar connects
 //!   upstream to that same authority: the host checked is the host reached.
 //! - path prefixes: the request path starts with one of them, on a segment
@@ -44,7 +47,7 @@ use proxyapi::{
 };
 use tracing::warn;
 
-use super::rule::{NetworkRule, QuotaConfig};
+use super::rule::{HttpScheme, NetworkRule, QuotaConfig};
 use crate::backend::BridgeSubnet;
 
 /// Methods allowed by a rule that does not list any.
@@ -114,6 +117,13 @@ impl HttpHandler for CelilyHandler {
         let Some(host) = request.head.uri.host() else {
             return self.reject(StatusCode::BAD_REQUEST, b"request is missing a host\n");
         };
+        let scheme = match request.head.uri.scheme_str() {
+            Some("http") => HttpScheme::Http,
+            Some("https") => HttpScheme::Https,
+            _ => {
+                return self.reject(StatusCode::BAD_REQUEST, b"request is not http or https\n");
+            },
+        };
         if METHOD_OVERRIDE_HEADERS
             .iter()
             .any(|name| request.head.headers.contains_key(name))
@@ -128,7 +138,7 @@ impl HttpHandler for CelilyHandler {
         let Some(index) = self
             .rules
             .iter()
-            .position(|rule| rule_matches(rule, host, path, method))
+            .position(|rule| rule_matches(rule, scheme, host, path, method))
         else {
             return self.reject(StatusCode::FORBIDDEN, b"Blocked by network policy\n");
         };
@@ -190,8 +200,15 @@ impl HttpHandler for CelilyHandler {
 }
 
 /// Whether `rule` is an HTTP rule allowing this request.
-fn rule_matches(rule: &NetworkRule, host: &str, path: &str, method: &str) -> bool {
+fn rule_matches(
+    rule: &NetworkRule,
+    scheme: HttpScheme,
+    host: &str,
+    path: &str,
+    method: &str,
+) -> bool {
     let NetworkRule::Http {
+        scheme: rule_scheme,
         host: rule_host,
         path_prefixes,
         methods,
@@ -212,7 +229,7 @@ fn rule_matches(rule: &NetworkRule, host: &str, path: &str, method: &str) -> boo
             .iter()
             .any(|m| m.eq_ignore_ascii_case(method)),
     };
-    host.eq_ignore_ascii_case(rule_host) && path_allowed && method_allowed
+    scheme == *rule_scheme && host.eq_ignore_ascii_case(rule_host) && path_allowed && method_allowed
 }
 
 /// Whether `path` is `prefix` or below it: the prefix must end on a
@@ -324,7 +341,12 @@ mod tests {
     }
 
     fn http_rule(host: &str) -> NetworkRule {
+        scheme_rule(HttpScheme::Https, host)
+    }
+
+    fn scheme_rule(scheme: HttpScheme, host: &str) -> NetworkRule {
         NetworkRule::Http {
+            scheme,
             host: host.into(),
             path_prefixes: None,
             auth: None,
@@ -363,16 +385,16 @@ mod tests {
     #[tokio::test]
     async fn allowed_host_is_forwarded() {
         let mut h = test_handler(vec![http_rule("api.example.com")], HashMap::new());
-        assert!(forwarded(&mut h, "GET", "http://api.example.com/").await);
+        assert!(forwarded(&mut h, "GET", "https://api.example.com/").await);
         assert!(forwarded(&mut h, "GET", "https://API.Example.com/x").await);
     }
 
     #[tokio::test]
     async fn other_hosts_get_403() {
         let mut h = test_handler(vec![http_rule("api.example.com")], HashMap::new());
-        let s = status(&mut h, "GET", "http://evil.com/").await;
+        let s = status(&mut h, "GET", "https://evil.com/").await;
         assert_eq!(s, Some(StatusCode::FORBIDDEN));
-        let s = status(&mut h, "GET", "http://sub.api.example.com/").await;
+        let s = status(&mut h, "GET", "https://sub.api.example.com/").await;
         assert_eq!(s, Some(StatusCode::FORBIDDEN));
     }
 
@@ -384,16 +406,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rules_match_their_scheme_only() {
+        let rules = vec![
+            scheme_rule(HttpScheme::Https, "tls.example.com"),
+            scheme_rule(HttpScheme::Http, "plain.example.com"),
+        ];
+        let mut h = test_handler(rules, HashMap::new());
+        assert!(forwarded(&mut h, "GET", "https://tls.example.com/").await);
+        assert!(forwarded(&mut h, "GET", "http://plain.example.com/").await);
+        for uri in ["http://tls.example.com/", "https://plain.example.com/"] {
+            assert_eq!(
+                status(&mut h, "GET", uri).await,
+                Some(StatusCode::FORBIDDEN)
+            );
+        }
+        let s = status(&mut h, "GET", "ftp://tls.example.com/").await;
+        assert_eq!(s, Some(StatusCode::BAD_REQUEST));
+    }
+
+    #[tokio::test]
     async fn methods_default_to_get_and_head() {
         let mut h = test_handler(vec![http_rule("api.example.com")], HashMap::new());
-        assert!(forwarded(&mut h, "HEAD", "http://api.example.com/").await);
-        let s = status(&mut h, "POST", "http://api.example.com/").await;
+        assert!(forwarded(&mut h, "HEAD", "https://api.example.com/").await);
+        let s = status(&mut h, "POST", "https://api.example.com/").await;
         assert_eq!(s, Some(StatusCode::FORBIDDEN));
     }
 
     #[tokio::test]
     async fn listed_methods_replace_the_default() {
         let rule = NetworkRule::Http {
+            scheme: HttpScheme::Https,
             host: "api.example.com".into(),
             path_prefixes: None,
             auth: None,
@@ -402,14 +444,15 @@ mod tests {
             quota: None,
         };
         let mut h = test_handler(vec![rule], HashMap::new());
-        assert!(forwarded(&mut h, "POST", "http://api.example.com/").await);
-        let s = status(&mut h, "GET", "http://api.example.com/").await;
+        assert!(forwarded(&mut h, "POST", "https://api.example.com/").await);
+        let s = status(&mut h, "GET", "https://api.example.com/").await;
         assert_eq!(s, Some(StatusCode::FORBIDDEN));
     }
 
     #[tokio::test]
     async fn path_prefixes_restrict_the_rule() {
         let rule = NetworkRule::Http {
+            scheme: HttpScheme::Https,
             host: "api.example.com".into(),
             path_prefixes: Some(vec!["/v1/".into(), "/v3/".into()]),
             auth: None,
@@ -418,14 +461,15 @@ mod tests {
             quota: None,
         };
         let mut h = test_handler(vec![rule], HashMap::new());
-        assert!(forwarded(&mut h, "GET", "http://api.example.com/v3/x").await);
-        let s = status(&mut h, "GET", "http://api.example.com/v2/x").await;
+        assert!(forwarded(&mut h, "GET", "https://api.example.com/v3/x").await);
+        let s = status(&mut h, "GET", "https://api.example.com/v2/x").await;
         assert_eq!(s, Some(StatusCode::FORBIDDEN));
     }
 
     #[tokio::test]
     async fn first_matching_rule_wins() {
         let narrow = NetworkRule::Http {
+            scheme: HttpScheme::Https,
             host: "api.example.com".into(),
             path_prefixes: Some(vec!["/v1/".into()]),
             auth: None,
@@ -434,17 +478,18 @@ mod tests {
             quota: Some(hourly(1)),
         };
         let mut h = test_handler(vec![narrow, http_rule("api.example.com")], HashMap::new());
-        assert!(forwarded(&mut h, "GET", "http://api.example.com/v1/x").await);
+        assert!(forwarded(&mut h, "GET", "https://api.example.com/v1/x").await);
         // The narrow rule matches first: its quota applies, no fallthrough.
-        let s = status(&mut h, "GET", "http://api.example.com/v1/x").await;
+        let s = status(&mut h, "GET", "https://api.example.com/v1/x").await;
         assert_eq!(s, Some(StatusCode::TOO_MANY_REQUESTS));
         // Outside the narrow rule, the broad one matches.
-        assert!(forwarded(&mut h, "GET", "http://api.example.com/v2/x").await);
+        assert!(forwarded(&mut h, "GET", "https://api.example.com/v2/x").await);
     }
 
     #[tokio::test]
     async fn quota_is_shared_between_clones() {
         let rule = NetworkRule::Http {
+            scheme: HttpScheme::Https,
             host: "api.example.com".into(),
             path_prefixes: None,
             auth: None,
@@ -454,9 +499,9 @@ mod tests {
         };
         let mut h = test_handler(vec![rule], HashMap::new());
         let mut clone = h.clone();
-        assert!(forwarded(&mut h, "GET", "http://api.example.com/").await);
-        assert!(forwarded(&mut clone, "GET", "http://api.example.com/").await);
-        let s = status(&mut h, "GET", "http://api.example.com/").await;
+        assert!(forwarded(&mut h, "GET", "https://api.example.com/").await);
+        assert!(forwarded(&mut clone, "GET", "https://api.example.com/").await);
+        let s = status(&mut h, "GET", "https://api.example.com/").await;
         assert_eq!(s, Some(StatusCode::TOO_MANY_REQUESTS));
     }
 
@@ -477,6 +522,7 @@ mod tests {
     #[tokio::test]
     async fn dot_segments_never_match_a_path_prefix() {
         let rule = NetworkRule::Http {
+            scheme: HttpScheme::Https,
             host: "api.example.com".into(),
             path_prefixes: Some(vec!["/v1/".into()]),
             auth: None,
@@ -485,8 +531,8 @@ mod tests {
             quota: None,
         };
         let mut h = test_handler(vec![rule], HashMap::new());
-        assert!(forwarded(&mut h, "GET", "http://api.example.com/v1/x").await);
-        let s = status(&mut h, "GET", "http://api.example.com/v1/%2e%2e/v2/x").await;
+        assert!(forwarded(&mut h, "GET", "https://api.example.com/v1/x").await);
+        let s = status(&mut h, "GET", "https://api.example.com/v1/%2e%2e/v2/x").await;
         assert_eq!(s, Some(StatusCode::FORBIDDEN));
     }
 
@@ -536,6 +582,7 @@ mod tests {
     #[tokio::test]
     async fn headers_then_auth_are_injected() {
         let rule = NetworkRule::Http {
+            scheme: HttpScheme::Https,
             host: "api.example.com".into(),
             path_prefixes: None,
             auth: Some(AuthConfig {
@@ -552,7 +599,7 @@ mod tests {
         };
         let secrets = HashMap::from([("token".into(), "s3cret".into())]);
         let mut h = test_handler(vec![rule], secrets);
-        let RequestOrResponse::Request(r) = handle(&mut h, "GET", "http://api.example.com/").await
+        let RequestOrResponse::Request(r) = handle(&mut h, "GET", "https://api.example.com/").await
         else {
             panic!("expected the request to be forwarded");
         };
@@ -594,6 +641,7 @@ mod tests {
     #[tokio::test]
     async fn method_override_headers_get_403() {
         let rule = NetworkRule::Http {
+            scheme: HttpScheme::Https,
             host: "api.example.com".into(),
             path_prefixes: None,
             auth: None,
