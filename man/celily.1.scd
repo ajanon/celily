@@ -324,8 +324,9 @@ are forcibly injected so that proxy-aware tools work transparently.
 Tools that ignore the proxy environment variables simply cannot reach
 the internet on ports 80 or 443 -- the bridge ACL drops their packets.
 
-If more granular network containment is needed, configure it via
-LXD/Incus profiles or a custom bridge at the host level.
+Instances are created without any LXD/Incus profile: a profile could
+add a network interface outside the isolation bridge, extra devices, or
+raw configuration. Every device of the instance comes from *celily*.
 
 ## Disk exhaustion
 

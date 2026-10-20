@@ -8,8 +8,8 @@ use crate::command::{AsyncCommandExt, CommandError};
 /// LXC-family backend -- spawns the `lxc` or `incus` CLI for all operations.
 ///
 /// The [`lxd`](Self::lxd) and [`incus`](Self::incus) constructors select the
-/// binary. `remote`, `project`, and `pool` scope all invocations and configure
-/// the root disk device.
+/// binary. `remote` and `project` scope all invocations, `pool` holds the
+/// root disk.
 #[derive(Debug, Clone)]
 pub struct LxcBackend {
     pub remote: Option<String>,
@@ -48,11 +48,8 @@ impl LxcBackend {
     ///
     /// Does nothing when [`project`](Self::project) is `None`.
     /// Idempotent -- "already exists" errors from `lxc project create`
-    /// are silently ignored.
-    ///
-    /// Also ensures the project's default profile has a root disk device
-    /// pointing at the configured [`pool`](Self::pool), since instances
-    /// require a root disk at creation time.
+    /// are silently ignored. Its profiles are never used: instances are
+    /// created without any.
     pub async fn ensure_project(&self) -> Result<(), CommandError> {
         let Some(ref project) = self.project else {
             return Ok(());
@@ -70,54 +67,16 @@ impl LxcBackend {
             .run()
             .await
         {
-            Ok(()) => {},
-            Err(CommandError::NonZero { ref stderr, .. })
-                if stderr
-                    .as_deref()
-                    .is_some_and(|s| s.contains("already exists")) => {},
-            Err(e) => return Err(e),
-        }
-
-        // Ensure the default profile has a root disk device with the
-        // configured pool. Try add first (device doesn't exist yet),
-        // then set the pool if it already does (pool may have changed).
-        //
-        // The profile is otherwise empty -- no bridge NIC, clean.
-        let root_res = self
-            .lxc_project_command_async()
-            .args([
-                "profile",
-                "device",
-                "add",
-                "default",
-                "root",
-                "disk",
-                "path=/",
-                &format!("pool={}", self.pool),
-            ])
-            .run()
-            .await;
-
-        match root_res {
-            Ok(()) => {},
+            Ok(()) => Ok(()),
             Err(CommandError::NonZero { ref stderr, .. })
                 if stderr
                     .as_deref()
                     .is_some_and(|s| s.contains("already exists")) =>
             {
-                // Device exists from a previous run -- set the pool
-                // to reconcile in case it changed.
-                self.lxc_project_command_async()
-                    .args([
-                        "profile", "device", "set", "default", "root", "pool", &self.pool,
-                    ])
-                    .run()
-                    .await?;
+                Ok(())
             },
-            Err(e) => return Err(e),
+            Err(e) => Err(e),
         }
-
-        Ok(())
     }
 
     /// Build a command that targets the default project.

@@ -348,10 +348,10 @@ Instance backend selection and LXD/Incus daemon configuration.
 
 *pool* = _string_
 	Name of the storage pool used for the instance's root disk device.
-	Applies to both containers and VMs. The pool is set in the project's
-	default profile via *lxc profile device add* during project
-	setup. When a non-default disk size is configured, it overrides the
-	profile's root device. Default: *"default"*.
+	Applies to both containers and VMs. Instances are created without any
+	LXD/Incus profile (*--no-profiles*), so the pool is never taken from
+	one: the root disk is created on this pool, with the size from
+	_[limits]_. Default: *"default"*.
 
 	Example: _pool = "zfs"_.
 

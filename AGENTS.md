@@ -65,14 +65,15 @@ backends is a compile-time switch. When adding backend functionality, add it to
 the trait first, then implement it for `LxcBackend`.
 
 **Instance lifecycle**: `Instance::prepare().....build()` assembles
-configuration (no LXD calls). Then `.init()?` creates the LXD instance and
-network isolation in parallel. Then `.start()?` boots, waits for systemd, pushes
-the CA cert, and rebuilds the trust store. Do not use `lxc launch` directly.
-`InstanceGuard::Drop` calls `lxc delete --force` (unless `--keep-instance`). The
-builder accepts `raw_idmap` for containers (not VMs) and warns on container-only
-limits applied to VMs. Drop order: `InstanceGuard` is dropped before
-`NetworkIsolation` -- guaranteed by `Instance<Running>`'s field declaration
-order.
+configuration (no LXD calls). Then `.init()?` creates the LXD instance
+(`lxc init --no-profiles --storage <pool>`: a profile could add a NIC outside
+the isolation bridge) and network isolation in parallel. Then `.start()?` boots,
+waits for systemd, pushes the CA cert, and rebuilds the trust store. Do not use
+`lxc launch` directly. `InstanceGuard::Drop` calls `lxc delete --force` (unless
+`--keep-instance`). The builder accepts `raw_idmap` for containers (not VMs) and
+warns on container-only limits applied to VMs. Drop order: `InstanceGuard` is
+dropped before `NetworkIsolation` -- guaranteed by `Instance<Running>`'s field
+declaration order.
 
 **Network isolation**: network isolation is mandatory -- every instance gets a
 dedicated bridge with an egress ACL and two per-instance proxies running

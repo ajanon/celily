@@ -19,8 +19,10 @@ impl crate::backend::InstanceBackend for LxcBackend {
         let mut cmd = self.lxc_project_command_async();
         cmd.args(["init", &config.image, name]);
 
-        // Root disk -- profile provides pool and path; we override size
-        // when a non-default disk size is configured.
+        // No profile: the daemon's default profile could add a NIC that
+        // bypasses the isolation bridge, disks, or raw.lxc. Every device
+        // is celily's own: the root disk here, the rest added after init.
+        cmd.args(["--no-profiles", "--storage", &self.pool]);
         if let Some(ref size) = config.disk_size {
             cmd.args(["--device", &format!("root,size={size}")]);
         }
