@@ -1599,7 +1599,7 @@ dependencies = [
 [[package]]
 name = "proxelar-proto"
 version = "0.6.1"
-source = "git+https://github.com/emanuele-em/proxelar?rev=12d3eb3948b221ecd197e6cce2fd88a641423eee#12d3eb3948b221ecd197e6cce2fd88a641423eee"
+source = "git+https://github.com/emanuele-em/proxelar?rev=80bb072198af36c817054d0e53bb27a7944fd928#80bb072198af36c817054d0e53bb27a7944fd928"
 dependencies = [
  "bytes",
  "futures-core",
@@ -1614,7 +1614,7 @@ dependencies = [
 [[package]]
 name = "proxyapi"
 version = "0.6.1"
-source = "git+https://github.com/emanuele-em/proxelar?rev=12d3eb3948b221ecd197e6cce2fd88a641423eee#12d3eb3948b221ecd197e6cce2fd88a641423eee"
+source = "git+https://github.com/emanuele-em/proxelar?rev=80bb072198af36c817054d0e53bb27a7944fd928#80bb072198af36c817054d0e53bb27a7944fd928"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -1653,7 +1653,7 @@ dependencies = [
 [[package]]
 name = "proxyapi_models"
 version = "0.6.1"
-source = "git+https://github.com/emanuele-em/proxelar?rev=12d3eb3948b221ecd197e6cce2fd88a641423eee#12d3eb3948b221ecd197e6cce2fd88a641423eee"
+source = "git+https://github.com/emanuele-em/proxelar?rev=80bb072198af36c817054d0e53bb27a7944fd928#80bb072198af36c817054d0e53bb27a7944fd928"
 dependencies = [
  "base64 0.23.1",
  "bytes",
