@@ -498,13 +498,13 @@ more-specific rules first.
 	(_%2e%2e_), delimited by _%2f_ or a backslash, or followed by
 	_;parameters_. Neither does a path still holding a _%_ once decoded
 	(_%252e_).
-	When absent, the entire host is allowed.
+	When absent, the entire host is allowed. An empty list is an error.
 
 *methods* = _[strings]_ (optional)
 	Allowed HTTP methods (e.g. _["GET", "HEAD"]_). When absent,
 	defaults to _["GET", "HEAD"]_. When present, only requests whose method
 	appears in the list match the rule -- other methods fall through
-	to the next rule or the default deny.
+	to the next rule or the default deny. An empty list is an error.
 
 Example with non-default methods:
 ```
