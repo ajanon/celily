@@ -494,7 +494,14 @@ including the header of _auth_, if set. Allowing both takes two rules.
 *host* = _string_ (required)
 	Hostname to allow (e.g. *api.example.com*). Matched,
 	case-insensitively, against the host the request is sent to: the
-	proxy connects to the host it checked.
+	proxy connects to the host it checked. A port is an error here: list
+	it in _ports_.
+
+*ports* = _[integers]_ (optional)
+	Ports the rule allows (e.g. _[443, 8443]_), matched against the port
+	the request is sent to; a URL without a port goes to the default
+	port of its scheme. When absent, only that default port is allowed:
+	_[443]_ for *https*, _[80]_ for *http*. An empty list is an error.
 
 *path_prefixes* = _[strings]_ (optional)
 	Path prefixes to restrict the rule to (e.g. _["/v2"]_). A prefix
@@ -619,6 +626,11 @@ quota = { max_requests = 1000, window = "1h" }
 [[network.allow]]
 type = "https"
 host = "docs.github.com"
+
+[[network.allow]]
+type = "http"
+host = "cache.example.internal"
+ports = [8080]
 
 [[network.allow]]
 type = "tcp"
