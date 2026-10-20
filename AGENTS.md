@@ -175,8 +175,9 @@ Forbidden path types:
 
 - **Exact match only** (children are mountable if individually allowed):
   `$HOME`, `~/.config`, `~/.local`, `~/.local/share`
-- **Subtree blocked** (everything underneath blocked): `~/.config/celily`,
-  `~/.ssh`, `~/.gnupg`, `~/.local/share/keyrings`
+- **Subtree blocked** (everything underneath blocked, and every path containing
+  it, for symlinked layouts): `~/.config/celily`, `~/.ssh`, `~/.gnupg`,
+  `~/.local/share/keyrings`
 
 If you add a new forbidden path, decide whether it should be `Forbidden::exact`
 or `Forbidden::under`, and update both `resolve_context` (where the list is

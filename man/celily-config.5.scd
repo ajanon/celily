@@ -397,7 +397,8 @@ _allowed_files_. *$HOME*, *$XDG_CONFIG_HOME*, *~/.local*, and *~/.local/share* a
 permanently forbidden (exact match only -- children can be mounted).
 *$XDG_CONFIG_HOME/celily*, *~/.ssh*, *~/.gnupg*, and
 *~/.local/share/keyrings* are permanently forbidden along with everything
-underneath them regardless of the allowlists.
+underneath them and every directory containing them, regardless of the
+allowlists.
 
 *source* = _path_ (required)
 	Host directory or file to mount. A leading *~* expands to the host

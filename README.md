@@ -140,6 +140,8 @@ and mounted read-only by default and:
     files are allowed mounted)
   - `~/.config/celily`
   - `~/.ssh`, `~/.gnupg`, `~/.local/share/keyrings`
+  - any directory containing one of the three above (e.g. through a symlinked
+    dotfiles layout)
 - Symlinks, sockets, and special files are rejected.
 
 ### Network isolation
