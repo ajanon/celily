@@ -9,7 +9,8 @@ celily-config - celily configuration file format
 *celily*(1) is configured through TOML files.
 All configuration files live under *$XDG_CONFIG_HOME/celily/*, which is always
 blocked from bind-mounts (see *MOUNT SECURITY* in *celily*(1)).
-There is no per-project configuration file.
+There is no per-project configuration file. An unknown key, in any file
+or table, is an error: a typo never silently falls back to a default.
 
 # FILE LAYOUT
 

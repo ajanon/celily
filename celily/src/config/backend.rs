@@ -11,6 +11,7 @@ pub enum BackendKind {
 
 /// Backend selection configuration.
 #[derive(Debug, Default, Deserialize, Merge)]
+#[serde(deny_unknown_fields)]
 #[merge(strategy = super::merge_strategy::overwrite_some)]
 pub struct BackendConfig {
     /// Which backend to use. Currently `lxd` and `incus` are supported.

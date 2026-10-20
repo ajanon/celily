@@ -43,7 +43,7 @@ pub enum ConfigError {
 }
 
 #[derive(Debug, Default, Deserialize, Merge)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 #[merge(strategy = merge_strategy::overwrite_some)]
 pub struct Config {
     // -- Backend selection --
@@ -151,6 +151,7 @@ where
 
 /// Parsed representation of `profiles.toml`.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ProfilesToml {
     profiles: HashMap<String, String>,
     #[serde(default)]
@@ -473,6 +474,31 @@ quota = { max_requests = 0, window = "1h" }
         let rule = config.network.allow.into_iter().next().unwrap();
         let err = rule.into_library().unwrap_err();
         assert!(err.to_string().contains("max_requests must be > 0"));
+    }
+
+    #[test]
+    fn unknown_fields_are_rejected() {
+        let base = "distro = \"arch\"\nallowed_dirs = [\"/tmp\"]\n";
+        for typo in [
+            "vms = true",
+            "[limits]\ncpus = 2",
+            "[backend]\npoool = \"p\"",
+            "[worktree]\nusername = \"me\"",
+            "[network]\nallowed = []",
+            "[[network.allow]]\ntype = \"http\"\nhost = \"a\"\nmethod = [\"POST\"]",
+            "[[network.allow]]\ntype = \"tcp\"\nhost = \"10.0.0.1\"\nports = [1]\nport = 2",
+            "[[network.allow]]\ntype = \"http\"\nhost = \"a\"\nquota = { max_requests = 1, window \
+             = \"1h\", burst = 2 }",
+            "[[network.allow]]\ntype = \"http\"\nhost = \"a\"\nauth = { secret = \"s\", header = \
+             \"h\", prefx = \"p\" }",
+            "[[mounts]]\nsource = \"/a\"\ntarget = \"/b\"\nreadonly = true",
+            "[[proxy]]\nconnect = \"unix:/a\"\nlisten = \"unix:/b\"\nbind = \"host\"",
+        ] {
+            let err = toml::from_str::<Config>(&format!("{base}{typo}\n")).unwrap_err();
+            assert!(err.to_string().contains("unknown field"), "{typo}: {err}");
+        }
+        let err = toml::from_str::<ProfilesToml>("[profiles]\n[inherits]\n").err();
+        assert!(err.is_some_and(|e| e.to_string().contains("unknown field")));
     }
 
     // -- Merge tests (derive + strategies) --

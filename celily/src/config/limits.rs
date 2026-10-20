@@ -2,7 +2,7 @@ use merge::Merge;
 use serde::Deserialize;
 
 #[derive(Debug, Default, Deserialize, Merge)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 #[merge(strategy = super::merge_strategy::overwrite_some)]
 pub struct Limits {
     pub cpu: Option<u32>,

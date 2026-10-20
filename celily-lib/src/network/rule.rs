@@ -21,6 +21,7 @@ pub struct QuotaConfig {
 /// only - they never appear as environment variables in the container.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct AuthConfig {
     /// Name of an `rbw` item to resolve.
     pub secret: String,
