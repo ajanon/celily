@@ -248,6 +248,13 @@ pub fn resolve_context(
             &canon_allowed_dirs,
             &canon_allowed_files,
         )?;
+        if mount.access == AccessMode::ReadWrite {
+            tracing::warn!(
+                "{} is mounted read-write: the host may later run or follow what the sandbox \
+                 writes there (scripts, git hooks, symlinks)",
+                canonical.display(),
+            );
+        }
         mount.source = canonical;
     }
 

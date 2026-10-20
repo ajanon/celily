@@ -317,7 +317,8 @@ Mounts are read-only unless set otherwise. In a read-write repository,
 the sandbox can plant hooks and config in *.git* (e.g. *core.fsmonitor*)
 that git runs on the host, and build scripts in the working tree. Mount a
 repository read-write only if you would run the sandbox's code on the
-host yourself; use worktree mode otherwise.
+host yourself; use worktree mode otherwise. *celily* warns at startup
+about every read-write mount, the project directory included.
 
 ## Network security
 
