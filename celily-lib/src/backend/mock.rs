@@ -2,13 +2,12 @@
 
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
-use std::net::IpAddr;
 use std::path::Path;
 use std::sync::Mutex;
 
 use async_trait::async_trait;
 
-use super::{BridgeGuard, CreateBridgeParams, Device, InstanceConfig};
+use super::{BridgeGuard, BridgeSubnet, CreateBridgeParams, Device, InstanceConfig};
 
 /// A mock [`super::InstanceBackend`] that records all calls for verification.
 pub struct MockInstanceBackend {
@@ -220,7 +219,7 @@ impl super::NetworkBackend for MockNetworkBackend {
         &self,
         name: &str,
         _params: &CreateBridgeParams,
-    ) -> Result<(Box<dyn BridgeGuard>, IpAddr), Self::Error> {
+    ) -> Result<(Box<dyn BridgeGuard>, BridgeSubnet), Self::Error> {
         self.calls
             .lock()
             .unwrap()
@@ -228,7 +227,7 @@ impl super::NetworkBackend for MockNetworkBackend {
                 name: name.to_string(),
             });
         let guard: Box<dyn BridgeGuard> = Box::new(MockBridgeGuard::new());
-        let ip: IpAddr = "10.0.0.1".parse().unwrap();
-        Ok((guard, ip))
+        let subnet = BridgeSubnet::parse("10.0.0.1/24").unwrap();
+        Ok((guard, subnet))
     }
 }

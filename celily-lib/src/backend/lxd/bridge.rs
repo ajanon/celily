@@ -1,26 +1,26 @@
 //! RAII guard for a per-instance LXD-managed network bridge.
 //!
 //! The bridge is created with LXD defaults (auto-assigned subnet, DHCP, NAT).
-//! The gateway IP is queried lazily on first access via
-//! [`get_gateway_ip`](LxdBridge::get_gateway_ip).
+//! The subnet is queried lazily on first access via
+//! [`get_subnet`](LxdBridge::get_subnet).
 //!
 //! Callers compose the bridge with ACLs and dnsmasq configuration
 //! externally: [`attach_acl`](LxdBridge::attach_acl),
 //! [`set_default_egress_reject`](LxdBridge::set_default_egress_reject), and
 //! [`set_raw_dnsmasq`](LxdBridge::set_raw_dnsmasq) are the building blocks.
 
-use std::net::IpAddr;
 use std::sync::Arc;
 
 use tracing::{error, info};
 
 use super::LxcBackend;
+use crate::backend::BridgeSubnet;
 use crate::command::CommandError;
 
 pub(crate) struct LxdBridge {
     pub name: String,
     lxd: Arc<LxcBackend>,
-    gateway_ip: tokio::sync::OnceCell<IpAddr>,
+    subnet: tokio::sync::OnceCell<BridgeSubnet>,
     keep: bool,
 }
 
@@ -28,8 +28,8 @@ impl LxdBridge {
     /// Create the bridge with LXD defaults (auto-assigned subnet, DHCP, NAT).
     ///
     /// Returns immediately after `lxc network create` so that the RAII guard
-    /// is in place. The gateway IP is queried lazily on first call to
-    /// [`get_gateway_ip`](Self::get_gateway_ip) -- the split guarantees that
+    /// is in place. The subnet is queried lazily on first call to
+    /// [`get_subnet`](Self::get_subnet) -- the split guarantees that
     /// `Drop` still runs and destroys the bridge if any later step fails.
     pub(crate) async fn create(
         lxd: Arc<LxcBackend>,
@@ -42,18 +42,23 @@ impl LxdBridge {
         Ok(Self {
             name,
             lxd,
-            gateway_ip: tokio::sync::OnceCell::new(),
+            subnet: tokio::sync::OnceCell::new(),
             keep,
         })
     }
 
-    /// Query the gateway IP from LXD, caching the result.
-    pub(crate) async fn get_gateway_ip(&self) -> Result<IpAddr, CommandError> {
-        self.gateway_ip
+    /// Query the gateway IP and subnet from LXD, caching the result.
+    pub(crate) async fn get_subnet(&self) -> Result<BridgeSubnet, CommandError> {
+        self.subnet
             .get_or_try_init(|| async {
-                let ip = self.lxd.get_network_ipv4(&self.name).await?;
-                info!(bridge = %self.name, gateway = %ip, "queried bridge gateway IP");
-                Ok(ip)
+                let subnet = self.lxd.get_network_ipv4(&self.name).await?;
+                info!(
+                    bridge = %self.name,
+                    gateway = %subnet.gateway,
+                    prefix_len = subnet.prefix_len,
+                    "queried bridge subnet",
+                );
+                Ok(subnet)
             })
             .await
             .copied()
