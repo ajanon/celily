@@ -17,7 +17,7 @@ pub use backend::{
     NetworkBackend,
     TcpAllow,
 };
-pub use command::{AsyncCommandExt, ChildExt, CommandError, CommandExt, ShutdownStatus};
+pub use command::{AsyncCommandExt, CommandError, CommandExt};
 pub use distro::DistroKind;
 pub use instance::{
     Initialized,

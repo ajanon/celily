@@ -22,7 +22,6 @@ async-trait = "0.1"
 bon = "3"
 bytes = "1"
 http = "1"
-nix = { version = "0.31", features = ["user", "signal", "process"] }
 # Unreleased upstream: HttpHandler embedding (#196), DnsHandler (#200) and
 # HttpHandler::handle_tunnel (#205) landed after proxyapi 0.6.1. Switch to
 # the crates.io release once it is published.

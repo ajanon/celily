@@ -1,9 +1,6 @@
 use std::process::Command;
-use std::thread::sleep;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use nix::sys::signal::{Signal, kill};
-use nix::unistd::Pid;
 use tracing::trace;
 
 // -------------------------------------------------------------------
@@ -93,92 +90,6 @@ impl CommandExt for Command {
             });
         }
         Ok(output)
-    }
-}
-
-// -------------------------------------------------------------------
-// ShutdownStatus
-// -------------------------------------------------------------------
-
-/// Outcome of a [`ChildExt::shutdown`] call.
-#[derive(Debug)]
-pub enum ShutdownStatus {
-    /// Process had already exited before we attempted shutdown
-    /// (crash, OOM, external kill, etc.).
-    AlreadyExited(std::process::ExitStatus),
-    /// Shutdown completed; the process has been reaped.
-    /// Inspect the [`ExitStatus`](std::process::ExitStatus) to
-    /// determine whether the exit was clean.
-    Exited(std::process::ExitStatus),
-    /// Failed to reap the process after shutdown.
-    WaitFailure(std::io::Error),
-}
-
-// -------------------------------------------------------------------
-// ChildExt
-// -------------------------------------------------------------------
-
-/// Extension methods for `std::process::Child`.
-pub trait ChildExt {
-    /// Politely shut down a child process.
-    ///
-    /// Sends SIGTERM, waits up to `grace` for the process to exit
-    /// gracefully, then escalates to SIGKILL if it hasn't.
-    ///
-    /// Returns [`ShutdownStatus::AlreadyExited`] if the process was
-    /// already dead before we touched it -- the caller can decide
-    /// whether that's an error.
-    fn shutdown(&mut self, grace: Duration) -> ShutdownStatus;
-}
-
-impl ChildExt for std::process::Child {
-    fn shutdown(&mut self, grace: Duration) -> ShutdownStatus {
-        // Check if already dead before we touch it.
-        // (Tiny race: the process could die between this check and the
-        // SIGTERM below, but the window is microseconds.)
-        match self.try_wait() {
-            Ok(Some(status)) => return ShutdownStatus::AlreadyExited(status),
-            Ok(None) => {},
-            Err(e) => return ShutdownStatus::WaitFailure(e),
-        }
-
-        // Send SIGTERM for a graceful shutdown.
-        let pid = Pid::from_raw(self.id() as i32);
-        if kill(pid, Signal::SIGTERM).is_err() {
-            // SIGTERM failed; fall back to SIGKILL immediately.
-            let _ = self.kill();
-            return match self.wait() {
-                Ok(s) => ShutdownStatus::Exited(s),
-                Err(e) => ShutdownStatus::WaitFailure(e),
-            };
-        }
-
-        // Poll for graceful exit within the grace period.
-        let deadline = Instant::now() + grace;
-        loop {
-            match self.try_wait() {
-                Ok(Some(s)) => return ShutdownStatus::Exited(s),
-                Ok(None) if Instant::now() < deadline => {
-                    sleep(Duration::from_millis(50));
-                },
-                Ok(None) => {
-                    // Grace period expired; escalate to SIGKILL.
-                    let _ = self.kill();
-                    return match self.wait() {
-                        Ok(s) => ShutdownStatus::Exited(s),
-                        Err(e) => ShutdownStatus::WaitFailure(e),
-                    };
-                },
-                Err(e) => {
-                    // try_wait failed; escalate to SIGKILL and try wait().
-                    let _ = self.kill();
-                    return match self.wait() {
-                        Ok(s) => ShutdownStatus::Exited(s),
-                        Err(_) => ShutdownStatus::WaitFailure(e),
-                    };
-                },
-            }
-        }
     }
 }
 
