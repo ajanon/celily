@@ -11,6 +11,10 @@
 //! A matching request is counted against the rule's quota (429 once
 //! exhausted), gets the rule's static headers and then its auth header,
 //! and is forwarded. Anything else gets a 403.
+//!
+//! Raw tunnels (CONNECT payloads that are neither TLS nor HTTP) are always
+//! closed: HTTP rules only allow HTTP requests, and TCP rules are enforced
+//! by the bridge ACL, without the proxy.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -18,8 +22,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use bytes::Bytes;
+use http::uri::Authority;
 use http::{HeaderMap, StatusCode};
-use proxyapi::{HttpContext, HttpHandler, ProxyRequest, ProxyResponse, RequestOrResponse};
+use proxyapi::{
+    HttpContext,
+    HttpHandler,
+    ProxyRequest,
+    ProxyResponse,
+    RequestOrResponse,
+    TunnelDecision,
+};
 use tracing::warn;
 
 use super::rule::{NetworkRule, QuotaConfig};
@@ -124,6 +136,14 @@ impl HttpHandler for CelilyHandler {
         response: ProxyResponse,
     ) -> ProxyResponse {
         response
+    }
+
+    async fn handle_tunnel(
+        &mut self,
+        _ctx: &HttpContext,
+        _authority: &Authority,
+    ) -> TunnelDecision {
+        TunnelDecision::Close
     }
 }
 
@@ -381,5 +401,16 @@ mod tests {
             r.head.headers.get("authorization"),
             Some(b"Bearer s3cret".as_slice())
         );
+    }
+
+    #[tokio::test]
+    async fn raw_tunnels_are_closed_even_to_allowed_hosts() {
+        let mut h = CelilyHandler::new(vec![http_rule("api.example.com")], HashMap::new());
+        let ctx = HttpContext {
+            remote_addr: "127.0.0.1:0".parse().unwrap(),
+        };
+        let authority = Authority::from_static("api.example.com:22");
+        let decision = h.handle_tunnel(&ctx, &authority).await;
+        assert_eq!(decision, TunnelDecision::Close);
     }
 }
