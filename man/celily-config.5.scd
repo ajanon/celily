@@ -493,7 +493,8 @@ more-specific rules first.
 	A path with a segment that a server could read as _._ or _.._ never
 	matches, since it could resolve outside the prefix: even percent-encoded
 	(_%2e%2e_), delimited by _%2f_ or a backslash, or followed by
-	_;parameters_.
+	_;parameters_. Neither does a path still holding a _%_ once decoded
+	(_%252e_).
 	When absent, the entire host is allowed.
 
 *methods* = _[strings]_ (optional)
