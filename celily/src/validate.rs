@@ -9,6 +9,8 @@ pub enum ForbiddenError {
     Exact { label: &'static str },
     #[error("path is under {label} (forbidden)")]
     Subtree { label: &'static str },
+    #[error("path contains {label} (forbidden)")]
+    Contains { label: &'static str },
 }
 use celily_lib::{AsyncCommandExt, CommandError};
 
@@ -17,7 +19,9 @@ use crate::util::{git_config, is_under_or_eq};
 /// A path that may not be bind-mounted into the container.
 ///
 /// `Exact` forbids only the path itself - children remain mountable.
-/// `Subtree` forbids the path and everything underneath it.
+/// `Subtree` forbids the path, everything underneath it, and every path
+/// containing it: a symlinked layout (`~/.ssh -> ~/dotfiles/ssh`) can put
+/// it under a directory that is not forbidden itself.
 ///
 /// Constructors `exact()` / `under()` handle canonicalization and can return
 /// `None` if the path does not exist (graceful skip).
@@ -62,6 +66,12 @@ impl Forbidden {
                 label,
             } if is_under_or_eq(canonical, blocked) => {
                 Err(ForbiddenError::Subtree { label: *label })
+            },
+            Forbidden::Subtree {
+                canonical: blocked,
+                label,
+            } if is_under_or_eq(blocked, canonical) => {
+                Err(ForbiddenError::Contains { label: *label })
             },
             _ => Ok(()),
         }
@@ -681,6 +691,26 @@ mod tests {
 
     fn canonic_path(path: &Path) -> PathBuf {
         path.canonicalize().unwrap()
+    }
+
+    #[test]
+    fn validate_rejects_mounts_containing_a_forbidden_subtree() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = canonic_path(tmp.path());
+        let dotfiles = home.join("dotfiles");
+        std::fs::create_dir_all(dotfiles.join("ssh")).unwrap();
+        std::os::unix::fs::symlink(dotfiles.join("ssh"), home.join(".ssh")).unwrap();
+        let forbidden = vec![Forbidden::under(&home, ".ssh", "~/.ssh").unwrap()];
+
+        let err = validate_mount_source(
+            &dotfiles,
+            &home,
+            &forbidden,
+            std::slice::from_ref(&dotfiles),
+            &[],
+        )
+        .unwrap_err();
+        assert!(format!("{err:#}").contains("path contains ~/.ssh"));
     }
 
     /// Cases checked against a real `git submodule update --init`.

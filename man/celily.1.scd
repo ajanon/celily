@@ -49,7 +49,8 @@ from *celily-config*(5).
 	and *~/.local/share* are permanently forbidden (exact match only -- children
 	can be mounted). *$XDG_CONFIG_HOME/celily*, *~/.ssh*, *~/.gnupg*, and
 	*~/.local/share/keyrings* are permanently forbidden along with everything
-	underneath them regardless of the allowlists.
+	underneath them and every directory containing them, regardless of the
+	allowlists.
 
 *--cpu* _N_
 	Number of vCPUs. Default: from _limits.cpu_, then 2.
@@ -273,6 +274,10 @@ container starts:
 	- *~/.local* -- The directory itself is blocked. Children (e.g. *~/.local/bin*) can be mounted if individually listed in _allowed_dirs_.
 	- *~/.local/share* -- The directory itself is blocked. Children other than _keyrings/_ can be mounted if individually listed in _allowed_dirs_.
 	- *~/.local/share/keyrings* and anything underneath -- Contains GNOME Keyring / user secret storage.
+
+	A source containing one of the paths marked "anything underneath" is
+	forbidden too. This matters when they are symlinks: with
+	*~/.ssh* -> *~/dotfiles/ssh*, *~/dotfiles* cannot be mounted.
 
 *3. Exact-match allowlist*
 	The source must be listed exactly (not as a subtree) in
