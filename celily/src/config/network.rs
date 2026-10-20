@@ -62,6 +62,16 @@ impl ConfigNetworkRule {
                 methods,
                 quota,
             } => {
+                // `path_prefixes = []` reads as "no path" but would allow
+                // all of them, `methods = []` would never match: leaving the
+                // key out is the way to get the default.
+                for (key, list) in [("path_prefixes", &path_prefixes), ("methods", &methods)] {
+                    if list.as_ref().is_some_and(Vec::is_empty) {
+                        return Err(ConfigError::Validation(format!(
+                            "allow rule for {host}: {key} is empty (leave it out for the default)"
+                        )));
+                    }
+                }
                 let quota = quota.map(ConfigQuotaConfig::into_library).transpose()?;
                 Ok(NetworkRule::Http {
                     host,
@@ -154,6 +164,17 @@ quota = { max_requests = 0, window = "1h" }
         let rule = nc.allow.into_iter().next().unwrap();
         let err = rule.into_library().unwrap_err();
         assert!(err.to_string().contains("max_requests must be > 0"));
+    }
+
+    #[test]
+    fn rejects_empty_lists() {
+        for key in ["path_prefixes", "methods"] {
+            let toml = format!("[[allow]]\ntype = \"http\"\nhost = \"a.example\"\n{key} = []\n");
+            let nc: NetworkConfig = toml::from_str(&toml).unwrap();
+            let rule = nc.allow.into_iter().next().unwrap();
+            let err = rule.into_library().unwrap_err().to_string();
+            assert!(err.contains(&format!("a.example: {key} is empty")), "{err}");
+        }
     }
 
     #[test]

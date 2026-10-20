@@ -179,7 +179,7 @@ fn rule_matches(rule: &NetworkRule, host: &str, path: &str, method: &str) -> boo
         return false;
     };
     let path_allowed = match path_prefixes.as_deref() {
-        None | Some([]) => true,
+        None => true,
         Some(prefixes) => {
             !may_escape_prefix(path) && prefixes.iter().any(|p| path_has_prefix(path, p))
         },

@@ -48,6 +48,8 @@ pub enum NetworkRule {
     /// All traffic to this host goes through the MITM proxy.
     Http {
         host: String,
+        /// Path prefixes the request path must start with. When absent,
+        /// all paths match; an empty list matches none.
         path_prefixes: Option<Vec<String>>,
         auth: Option<AuthConfig>,
         /// Static HTTP headers to inject on matching requests.
