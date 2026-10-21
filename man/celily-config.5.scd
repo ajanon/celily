@@ -77,7 +77,7 @@ with the following rules:
 
 *Lists*
 	Lists from the default and profile are concatenated (default first,
-	profile appended). This applies to _mounts_, _proxy_,
+	profile appended). This applies to _mounts_, _volumes_, _proxy_,
 	_network.allow_, _allowed_dirs_, _allowed_files_, _pass_env_, and
 	_pre_run_ (a single script per file, collected into a list).
 
@@ -347,7 +347,8 @@ Instance backend selection and LXD/Incus daemon configuration.
 	Example: _project = "celily"_.
 
 *pool* = _string_
-	Name of the storage pool used for the instance's root disk device.
+	Name of the storage pool used for the instance's root disk device,
+	and where _[[volumes]]_ are looked up.
 	Applies to both containers and VMs. Instances are created without any
 	LXD/Incus profile (*--no-profiles*), so the pool is never taken from
 	one: the root disk is created on this pool, with the size from
@@ -425,6 +426,54 @@ access = "readwrite"
 [[mounts]]
 source = "~/Projects/client"
 target = "/mnt/client"
+```
+
+# [[volumes]] SECTION
+
+Array of custom storage volumes attached to every instance: storage that
+outlives the instance without being on the host filesystem. A volume has
+its own size and snapshots (see *lxc storage volume*), out of the
+instance's reach. Unlike a read-write mount, what the sandbox writes there
+never lands in *$HOME* and cannot fill the host's disk.
+
+*celily* neither creates nor deletes volumes. Create them in _pool_, and
+in _project_ if set (see *[backend] SECTION*), before the first run.
+Deleting the instance leaves them untouched.
+
+*name* = _string_ (required)
+	Name of the volume in _pool_.
+
+*target* = _path_ (required)
+	Mount point inside the instance. A leading *~* expands to the container
+	home directory (_/home/_*user* or _/root_ with *--root*).
+
+*access* = _string_ (optional)
+	Set to *"readwrite"* for read-write access. Default: *"readonly"*.
+
+A volume is shared by every instance it is attached to: what one sandbox
+writes, the next one reads. Attach it in the profiles that should share
+it, not in a parent profile that every other profile inherits.
+
+Example, a coding agent's session history with daily snapshots kept four
+weeks. Create the volume:
+```
+lxc storage volume create --project celily default pi-sessions-work \\
+    size=1GiB snapshots.schedule=@daily snapshots.expiry=4w
+```
+
+Attach it in the profile:
+```
+[[volumes]]
+name = "pi-sessions-work"
+target = "~/.pi/agent/sessions"
+access = "readwrite"
+```
+
+A new volume's root directory usually belongs to root. Make it writable
+for the container user once, while an instance has it attached:
+```
+lxc exec --project celily INSTANCE -- \\
+    chown 1000:1000 /home/dev/.pi/agent/sessions
 ```
 
 # [network] SECTION

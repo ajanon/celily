@@ -30,6 +30,10 @@ Each environment gets its own filesystem, isolated from the host by default.
 Directories/files can be added to an allowlist and automatically bind-mount as
 required (for configuration, additional projects, etc).
 
+State that must outlive the environment (e.g. a coding agent's sessions) can
+live on an LXD/Incus storage volume instead of a read-write mount: it has its
+own size and snapshots, and never lands on the host filesystem.
+
 #### Worktree mode
 
 In a git repository, `celily -w <name>` clones the project inside the container,
