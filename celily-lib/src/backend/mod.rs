@@ -23,6 +23,13 @@ pub enum Device {
         target: PathBuf,
         access: AccessMode,
     },
+    /// Attach an existing custom storage volume of the backend's pool.
+    Volume {
+        /// Volume name, as in `lxc storage volume create <pool> <name>`.
+        name: String,
+        target: PathBuf,
+        access: AccessMode,
+    },
     /// Unix socket proxy, listening in the instance and connecting on the
     /// host.
     Proxy {

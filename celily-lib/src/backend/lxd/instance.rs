@@ -9,6 +9,50 @@ use crate::backend::{Device, InstanceConfig};
 use crate::command::{AsyncCommandExt, CommandError, CommandExt};
 use crate::mount::AccessMode;
 
+impl LxcBackend {
+    /// What `lxc config device add <instance> <device>` takes for `device`:
+    /// its type, then its properties.
+    fn device_args(&self, device: &Device) -> Vec<String> {
+        let mut args = match device {
+            Device::Disk { source, .. } => {
+                vec!["disk".into(), format!("source={}", source.display())]
+            },
+            Device::Volume { name, .. } => vec![
+                "disk".into(),
+                format!("pool={}", self.pool),
+                format!("source={name}"),
+            ],
+            Device::Proxy {
+                connect,
+                listen,
+                uid,
+                gid,
+                host_uid,
+                host_gid,
+                mode,
+            } => vec![
+                "proxy".into(),
+                "bind=instance".into(),
+                format!("connect={connect}"),
+                format!("listen={listen}"),
+                format!("mode={mode}"),
+                format!("uid={uid}"),
+                format!("gid={gid}"),
+                format!("security.uid={host_uid}"),
+                format!("security.gid={host_gid}"),
+            ],
+        };
+        if let Device::Disk { target, access, .. } | Device::Volume { target, access, .. } = device
+        {
+            args.push(format!("path={}", target.display()));
+            if *access == AccessMode::ReadOnly {
+                args.push("readonly=true".into());
+            }
+        }
+        args
+    }
+}
+
 #[async_trait]
 impl crate::backend::InstanceBackend for LxcBackend {
     type Error = CommandError;
@@ -98,59 +142,11 @@ impl crate::backend::InstanceBackend for LxcBackend {
         dev_name: &str,
         device: &Device,
     ) -> Result<(), Self::Error> {
-        match device {
-            Device::Disk {
-                source,
-                target,
-                access,
-            } => {
-                let source_arg = format!("source={}", source.display());
-                let path_arg = format!("path={}", target.display());
-                let mut args = vec![
-                    "config",
-                    "device",
-                    "add",
-                    name,
-                    dev_name,
-                    "disk",
-                    &source_arg,
-                    &path_arg,
-                ];
-                if access == &AccessMode::ReadOnly {
-                    args.push("readonly=true");
-                }
-                self.lxc_project_command_async().args(&args).run().await
-            },
-            Device::Proxy {
-                connect,
-                listen,
-                uid,
-                gid,
-                host_uid,
-                host_gid,
-                mode,
-            } => {
-                self.lxc_project_command_async()
-                    .args([
-                        "config",
-                        "device",
-                        "add",
-                        name,
-                        dev_name,
-                        "proxy",
-                        "bind=instance",
-                        &format!("connect={connect}"),
-                        &format!("listen={listen}"),
-                        &format!("mode={mode}"),
-                        &format!("uid={uid}"),
-                        &format!("gid={gid}"),
-                        &format!("security.uid={host_uid}"),
-                        &format!("security.gid={host_gid}"),
-                    ])
-                    .run()
-                    .await
-            },
-        }
+        self.lxc_project_command_async()
+            .args(["config", "device", "add", name, dev_name])
+            .args(self.device_args(device))
+            .run()
+            .await
     }
 
     async fn attach_to_bridge(
@@ -378,5 +374,27 @@ mod tests {
             "upload-pack",
         ];
         assert_eq!(argv, expected.map(OsString::from));
+    }
+
+    #[test]
+    fn volume_is_a_disk_of_the_backend_pool() {
+        let mut backend = LxcBackend::lxd();
+        backend.pool = "zfs".into();
+        let volume = |access| Device::Volume {
+            name: "pi-sessions".into(),
+            target: "/home/dev/.pi/agent/sessions".into(),
+            access,
+        };
+        let rw = [
+            "disk",
+            "pool=zfs",
+            "source=pi-sessions",
+            "path=/home/dev/.pi/agent/sessions",
+        ];
+        assert_eq!(backend.device_args(&volume(AccessMode::ReadWrite)), rw);
+        assert_eq!(
+            backend.device_args(&volume(AccessMode::ReadOnly)),
+            [&rw[..], &["readonly=true"]].concat(),
+        );
     }
 }

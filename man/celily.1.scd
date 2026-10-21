@@ -355,6 +355,9 @@ The root disk is constrained by *--disk*, but bind-mounts (the project
 directory, *--mount*, _[[mounts]]_) do not count against the container's
 quota. A tool that writes large files to a read-write mount can exhaust
 the host's free space. Keep mounts read-only (the default) where possible.
+State that must outlive the instance can live on a storage volume
+instead (_[[volumes]]_ in *celily-config*(5)): it has its own size, and
+is not on the host's filesystem.
 
 # FILES
 

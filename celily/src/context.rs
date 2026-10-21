@@ -313,6 +313,11 @@ pub fn resolve_context(
             mode: proxy.mode.clone(),
         });
     }
+    extra_devices.extend(cfg.volumes.iter().map(|volume| Device::Volume {
+        name: volume.name.clone(),
+        target: expand_container_tilde(&volume.target, &container_home),
+        access: volume.access,
+    }));
 
     Ok(RunContext {
         image,
@@ -426,5 +431,53 @@ mod tests {
         assert_eq!(access(&["--project-readwrite"], None), ReadWrite);
         assert_eq!(access(&["--no-project-readwrite"], Some(true)), ReadOnly);
         assert_eq!(access(&["-w", "foo"], Some(true)), ReadOnly);
+    }
+
+    /// Volumes become devices, read-only by default, targets expanded like
+    /// mount targets.
+    #[test]
+    fn volumes_are_devices() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path().canonicalize().unwrap();
+        let config_dir = home.join(".config");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        let cfg: Config = toml::from_str(
+            r#"
+[[volumes]]
+name = "pi-sessions"
+target = "~/.pi/agent/sessions"
+access = "readwrite"
+
+[[volumes]]
+name = "archive"
+target = "/mnt/archive"
+"#,
+        )
+        .unwrap();
+        let args = Args::try_parse_from(["celily"]).unwrap();
+        let ctx = resolve_context(&args, &cfg, &home, &home, &home, &config_dir, &[], &[]).unwrap();
+        let volumes: Vec<_> = ctx
+            .extra_devices
+            .iter()
+            .map(|device| match device {
+                Device::Volume {
+                    name,
+                    target,
+                    access,
+                } => (name.as_str(), target.to_str().unwrap(), *access),
+                other => panic!("not a volume: {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            volumes,
+            [
+                (
+                    "pi-sessions",
+                    "/home/dev/.pi/agent/sessions",
+                    AccessMode::ReadWrite
+                ),
+                ("archive", "/mnt/archive", AccessMode::ReadOnly),
+            ]
+        );
     }
 }

@@ -4,6 +4,7 @@ pub mod merge_strategy;
 pub mod network;
 pub mod proxy;
 pub mod validation;
+pub mod volume;
 pub mod worktree;
 
 use std::collections::{HashMap, HashSet};
@@ -20,6 +21,7 @@ pub use self::backend::{BackendConfig, BackendKind};
 pub use self::limits::Limits;
 pub use self::network::NetworkConfig;
 use self::validation::{validate_config_dirs, validate_node_permissions};
+pub use self::volume::Volume;
 pub use self::worktree::WorktreeConfig;
 use crate::config::proxy::ProxyDevice;
 use crate::util::{expand_host_tilde, is_under_or_eq};
@@ -131,6 +133,9 @@ pub struct Config {
     /// Each entry corresponds to an LXD/Incus proxy device.
     #[merge(strategy = ::merge::vec::append)]
     pub proxy: Vec<ProxyDevice>,
+    /// Existing custom storage volumes of `[backend] pool` to attach.
+    #[merge(strategy = ::merge::vec::append)]
+    pub volumes: Vec<Volume>,
 }
 
 /// Deserialize one file's `pre_run` script into the list that profile
@@ -493,6 +498,7 @@ quota = { max_requests = 0, window = "1h" }
              \"h\", prefx = \"p\" }",
             "[[mounts]]\nsource = \"/a\"\ntarget = \"/b\"\nreadonly = true",
             "[[proxy]]\nconnect = \"unix:/a\"\nlisten = \"unix:/b\"\nbind = \"host\"",
+            "[[volumes]]\nname = \"v\"\ntarget = \"/b\"\npool = \"p\"",
         ] {
             let err = toml::from_str::<Config>(&format!("{base}{typo}\n")).unwrap_err();
             assert!(err.to_string().contains("unknown field"), "{typo}: {err}");
