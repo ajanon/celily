@@ -25,7 +25,7 @@ http = "1"
 # Unreleased upstream: HttpHandler embedding (#196), DnsHandler (#200) and
 # HttpHandler::handle_tunnel (#205) landed after proxyapi 0.6.1. Switch to
 # the crates.io release once it is published.
-proxyapi = { git = "https://github.com/emanuele-em/proxelar", rev = "80bb072198af36c817054d0e53bb27a7944fd928", default-features = false }
+proxyapi = { git = "https://github.com/emanuele-em/proxelar", rev = "b4fed32219e0ba216860be1eaeda919d75e6994a", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 serde = { version = "1", features = ["derive"], optional = true }
 strum = { version = "0.28", features = ["derive"] }
