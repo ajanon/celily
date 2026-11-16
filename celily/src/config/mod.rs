@@ -188,13 +188,14 @@ impl ProfilesToml {
         })?;
         parsed
             .validate()
+            .and_then(|()| parsed.check_fragments(dir))
             .map_err(|e| ConfigError::Validation(format!("{}: {e}", path.display())))?;
         Ok(parsed)
     }
 
     /// Check the whole file, not only the profile about to be used: a
     /// mistake shows up on the next run, not on the day a directory
-    /// happens to match. Fragment files are checked when loaded.
+    /// happens to match. Fragment contents are checked when loaded.
     fn validate(&self) -> Result<(), String> {
         for (profile, fragments) in &self.profiles {
             if fragments.is_empty() {
@@ -227,6 +228,25 @@ impl ProfilesToml {
                     "[directories] maps '{dir}' to profile '{profile}', which [profiles] does not \
                      define"
                 ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Every fragment of every profile exists in `dir`, for the same
+    /// reason as [`Self::validate`]. Unlike `allowed_dirs` entries,
+    /// skipped with a warning when missing, fragments are part of the
+    /// config: one cannot legitimately be missing (unmounted drive...).
+    fn check_fragments(&self, dir: &Path) -> Result<(), String> {
+        for (profile, fragments) in &self.profiles {
+            for name in fragments {
+                let path = fragment_path(dir, name);
+                if !path.exists() {
+                    return Err(format!(
+                        "fragment '{name}' of profile '{profile}' not found at {}",
+                        path.display(),
+                    ));
+                }
             }
         }
         Ok(())
@@ -325,7 +345,7 @@ impl Config {
 
     /// Merge the fragments of `profile` (`dir/fragments/NAME.toml`) in
     /// list order: later fragments override earlier ones. The result
-    /// must set `distro`.
+    /// must set `distro`. [`ProfilesToml::load`] checked they exist.
     fn load_profile(
         dir: &Path,
         profiles: &ProfilesToml,
@@ -341,14 +361,7 @@ impl Config {
 
         let mut merged = Config::default();
         for name in fragments {
-            let path = dir.join("fragments").join(format!("{name}.toml"));
-            if !path.exists() {
-                return Err(ConfigError::Validation(format!(
-                    "fragment '{name}' of profile '{profile}' not found at {}",
-                    path.display(),
-                )));
-            }
-            merged.merge(Self::load_file(&path)?);
+            merged.merge(Self::load_file(&fragment_path(dir, name))?);
         }
 
         if merged.distro.is_none() {
@@ -379,6 +392,11 @@ pub fn config_dir() -> PathBuf {
 /// `~/.config/celily`: `profiles.toml` and `fragments/`.
 fn celily_config_dir() -> PathBuf {
     config_dir().join("celily")
+}
+
+/// `dir/fragments/NAME.toml`. `name` passed [`is_valid_fragment_name`].
+fn fragment_path(dir: &Path, name: &str) -> PathBuf {
+    dir.join("fragments").join(format!("{name}.toml"))
 }
 
 /// Reject fragment names that are empty, contain `/` or `\\`,
@@ -607,28 +625,35 @@ quota = { max_requests = 0, window = "1h" }
         }
     }
 
-    /// Fragments merge in list order, from `dir/fragments/NAME.toml`.
-    #[test]
-    fn load_profile_merges_fragments_in_order() {
+    /// Write `dir/fragments/NAME.toml` files, 0600 as `load_file` wants.
+    fn write_fragments(dir: &Path, fragments: &[(&str, &str)]) {
         use std::os::unix::fs::PermissionsExt;
 
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path();
-        std::fs::create_dir(dir.join("fragments")).unwrap();
-        for (name, content) in [
-            (
-                "base",
-                "distro = \"arch\"\nimage = \"base\"\npre_run = \"base\"",
-            ),
-            ("x", "image = \"x\"\npre_run = \"x\""),
-        ] {
-            let path = dir.join("fragments").join(format!("{name}.toml"));
+        std::fs::create_dir_all(dir.join("fragments")).unwrap();
+        for (name, content) in fragments {
+            let path = fragment_path(dir, name);
             std::fs::write(&path, content).unwrap();
             std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
         }
+    }
+
+    /// Fragments merge in list order, from `dir/fragments/NAME.toml`.
+    #[test]
+    fn load_profile_merges_fragments_in_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write_fragments(
+            dir,
+            &[
+                (
+                    "base",
+                    "distro = \"arch\"\nimage = \"base\"\npre_run = \"base\"",
+                ),
+                ("x", "image = \"x\"\npre_run = \"x\""),
+            ],
+        );
         let profiles = profiles_toml(
-            "[profiles]\nbx = [\"base\", \"x\"]\nxb = [\"x\", \"base\"]\nx = [\"x\"]\nmissing = \
-             [\"base\", \"nope\"]\n",
+            "[profiles]\nbx = [\"base\", \"x\"]\nxb = [\"x\", \"base\"]\nx = [\"x\"]\n",
         );
 
         let cfg = Config::load_profile(dir, &profiles, "bx").unwrap();
@@ -641,12 +666,31 @@ quota = { max_requests = 0, window = "1h" }
 
         for (profile, expected) in [
             ("x", "distro is required"),
-            ("missing", "fragment 'nope' of profile 'missing' not found"),
             ("undefined", "profile 'undefined' is not defined"),
         ] {
             let err = Config::load_profile(dir, &profiles, profile).unwrap_err();
             assert!(err.to_string().contains(expected), "{profile}: {err}");
         }
+    }
+
+    /// A missing fragment is an error in any profile, not only the one
+    /// about to be used.
+    #[test]
+    fn check_fragments_covers_every_profile() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write_fragments(dir, &[("base", "")]);
+
+        let ok = profiles_toml("[profiles]\nused = [\"base\"]\n");
+        assert_eq!(ok.check_fragments(dir), Ok(()));
+
+        let missing =
+            profiles_toml("[profiles]\nused = [\"base\"]\nunused = [\"base\", \"nope\"]\n");
+        let err = missing.check_fragments(dir).unwrap_err();
+        assert!(
+            err.contains("fragment 'nope' of profile 'unused' not found"),
+            "{err}"
+        );
     }
 
     // -- Merge tests (derive + strategies) --
