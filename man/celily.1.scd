@@ -94,14 +94,9 @@ from *celily-config*(5).
 	expands to the container home directory. Default: *~/project*.
 
 *--profile* _NAME_
-	Load the named profile from *$XDG_CONFIG_HOME/celily/profiles/*_NAME_*.toml*
-	and merge it over the default config. If the profile has an
-	_[inherit]_ entry in _profiles.toml_, the parent is merged
-	first. Skips auto-detection.
-
-*--no-profile*
-	Skip profile auto-detection; use only the default config. Mutually
-	exclusive with *--profile*.
+	Use the profile _NAME_ of *$XDG_CONFIG_HOME/celily/profiles.toml*
+	instead of the one mapped to the current directory. See *PROFILES* in
+	*celily-config*(5).
 
 *-w*, *--worktree* _NAME_
 	Enable worktree mode with the given name. See *WORKTREE MODE* below.
@@ -140,15 +135,16 @@ is started.
 # PROFILE AUTO-DETECTION
 
 By default, *celily* reads *$XDG_CONFIG_HOME/celily/profiles.toml* and
-matches the current working directory against its entries using longest-prefix
-matching. If multiple entries match, the one with the longest path wins.
-The matched profile is loaded from *$XDG_CONFIG_HOME/celily/profiles/*_NAME_*.toml*
-and merged over *$XDG_CONFIG_HOME/celily/config.toml*.
-If the profile has an _[inherit]_ entry, the parent profile is merged
-first (see *[inherit] SECTION* in *celily-config*(5)).
+matches the current working directory against its _[directories]_
+entries. If multiple entries match, the one with the longest path wins.
+The matched profile's fragments, from
+*$XDG_CONFIG_HOME/celily/fragments/*_NAME_*.toml*, are merged in the
+order the profile lists them (see *PROFILES* in *celily-config*(5)).
 
-Use *--profile* _NAME_ to override auto-detection, or
-*--no-profile* to use only the default config.
+There is no default configuration: when no entry matches, *celily*
+refuses to run. An entry for _"/"_ matches every directory.
+
+Use *--profile* _NAME_ to override auto-detection.
 
 # USER
 
@@ -361,14 +357,11 @@ is not on the host's filesystem.
 
 # FILES
 
-*$XDG_CONFIG_HOME/celily/config.toml*
-	Global configuration file.
-
 *$XDG_CONFIG_HOME/celily/profiles.toml*
-	Optional directory-to-profile mapping.
+	Profiles, and the directories they apply to. Required.
 
-*$XDG_CONFIG_HOME/celily/profiles/*_NAME_*.toml*
-	Profile configuration files (same schema as config.toml).
+*$XDG_CONFIG_HOME/celily/fragments/*_NAME_*.toml*
+	Configuration fragments that profiles are made of.
 
 # EXAMPLES
 
@@ -385,11 +378,6 @@ $ celily -- cargo build
 Use a named profile:
 ```
 $ celily --profile rust -- cargo build
-```
-
-Skip profile auto-detection:
-```
-$ celily --no-profile -- cargo build
 ```
 
 Keep the instance alive after exit:
