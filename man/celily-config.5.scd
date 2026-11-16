@@ -35,8 +35,8 @@ _profiles.toml_ holds two tables:
 	at most once.
 
 *[directories]*
-	Maps directory paths (a leading *~* expands to *$HOME*) to profile
-	names. *celily* matches the current working directory against these
+	Maps directory paths to profile names. A path is absolute, or starts
+	with *~/* (or is *~*), which expands to *$HOME*. *celily* matches the current working directory against these
 	entries, and the longest matching path wins. The path _"/"_ matches
 	every directory. Entries that cannot be resolved (e.g. a path on an
 	unmounted drive) are skipped with a warning. Entries resolving to the
@@ -72,8 +72,9 @@ profile is the way to keep its settings out.
 *Errors*
 	_profiles.toml_ is checked as a whole on every run, not only the
 	selected profile. An empty fragment list, a fragment listed twice, an
-	invalid fragment name (empty, containing / or \\, . or ..) and a
-	directory mapped to an undefined profile are errors. Without
+	invalid fragment name (empty, containing / or \\, . or ..), a relative
+	directory path (*~user/* included) and a directory mapped to an
+	undefined profile are errors. Without
 	*--profile*, so are two directories resolving to the same path with
 	different profiles, whether they match the current directory or not.
 	A fragment of the selected profile missing on disk is an error, and
