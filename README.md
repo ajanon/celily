@@ -191,5 +191,5 @@ Full documentation lives in the man pages:
 
 - `man/celily.1` -- CLI flags, mount security, environment handling, worktree
   mode
-- `man/celily-config.5` -- config file schema, sections, profiles and
-  fragments, merging rules, image requirements
+- `man/celily-config.5` -- config file schema, sections, profiles and fragments,
+  merging rules, image requirements
