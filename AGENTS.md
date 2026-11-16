@@ -107,8 +107,8 @@ ports and capabilities entirely. The `raw.dnsmasq` config is:
 
 **Config resolution**: CLI arg > the profile's fragments, later ones first >
 hardcoded default. Applied consistently in both `run()` functions -- don't
-bypass it. There is no base config file: every run uses exactly one profile,
-and a profile is an ordered list of fragments.
+bypass it. There is no base config file: every run uses exactly one profile, and
+a profile is an ordered list of fragments.
 
 There are two config-loading entry points, both on `Config`, both reading
 `~/.config/celily/profiles.toml` (required, validated as a whole by
@@ -136,8 +136,8 @@ permission audit is the verification.
 **Fragment merging semantics** (in `Config::merge`, applied once per fragment in
 list order):
 
-- Scalar fields: the later fragment wins if present, otherwise the earlier
-  value stays.
+- Scalar fields: the later fragment wins if present, otherwise the earlier value
+  stays.
 - Lists (`mounts`, `volumes`, `proxy`, `allowed_dirs`, `allowed_files`,
   `pass_env`, `pre_run`): concatenated in fragment order. `pre_run` is a single
   string per file in TOML, collected into a list; every script runs, in that
@@ -155,9 +155,10 @@ first fragment.
 (`.unwrap_or(true)`; see `Config.secure_boot`). This lets a fragment explicitly
 set `false` to disable something that defaults on. A plain `bool` with
 `#[serde(default)]` can't distinguish "not set" from "set to false", so
-`earlier || later` would block later fragments from turning the feature off. A serde
-default of `Some(true)` on a field of a nested table is wrong too: a file that
-has the table but omits the key then sets it, overriding an earlier `false`.
+`earlier || later` would block later fragments from turning the feature off. A
+serde default of `Some(true)` on a field of a nested table is wrong too: a file
+that has the table but omits the key then sets it, overriding an earlier
+`false`.
 
 **Config validation flow**: `profiles.toml` is validated as a whole in
 `ProfilesToml::validate`; the merged profile only has to set `distro`
@@ -247,8 +248,8 @@ into `man1/` and `man5/` under the manpath when installing.
 
 `$XDG_CONFIG_HOME/celily/profiles.toml` (required) defines the profiles;
 `$XDG_CONFIG_HOME/celily/fragments/{name}.toml` hold the settings. Every
-fragment has the same schema; the merged profile must contain at least
-`distro`. The full schema is documented in `celily-config.5`.
+fragment has the same schema; the merged profile must contain at least `distro`.
+The full schema is documented in `celily-config.5`.
 
 Notable fields (all at top level; no `[common]` / `[run]` nesting):
 
@@ -323,9 +324,9 @@ directory mapped to an undefined profile.
 
 At launch (`Config::load_for_dir`), each `[directories]` key is canonicalized
 and the longest-prefix match against the current working directory determines
-the profile. No match is an error. `--profile` bypasses auto-detection. There
-is no CLI flag to add or remove fragments: composition lives in
-`profiles.toml` only.
+the profile. No match is an error. `--profile` bypasses auto-detection. There is
+no CLI flag to add or remove fragments: composition lives in `profiles.toml`
+only.
 
 ## Command resolution
 
