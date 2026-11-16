@@ -36,14 +36,14 @@ _profiles.toml_ holds two tables:
 
 *[directories]*
 	Maps directory paths to profile names. A path is absolute, or starts
-	with *~/* (or is *~*), which expands to *$HOME*. *celily* matches the current working directory against these
-	entries, and the longest matching path wins. The path _"/"_ matches
-	every directory. Entries that cannot be resolved (e.g. a path on an
-	unmounted drive) are skipped with a warning. Entries resolving to the
-	same directory (_"~/work"_ and _"/home/me/work/"_, or through a
-	symlink) must map to the same profile. When no entry matches,
-	*celily* refuses to run: add an entry, or select a profile with
-	*--profile*.
+	with *~/* (or is *~*), which expands to *$HOME*. *celily* matches the
+	current working directory against these entries, and the longest
+	matching path wins. The path _"/"_ matches every directory. Entries
+	that cannot be resolved (e.g. a path on an unmounted drive) are skipped
+	with a warning. Entries resolving to the same directory (_"~/work"_ and
+	_"/home/me/work/"_, or through a symlink) must map to the same profile.
+	When no entry matches, *celily* refuses to run: add an entry, or select
+	a profile with *--profile*.
 
 Example:
 ```
