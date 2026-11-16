@@ -106,9 +106,10 @@ ports and capabilities entirely. The `raw.dnsmasq` config is:
 `no-resolv\nno-poll\ncache-size=0\nserver=<gateway_ip>#<dns_port>\n`.
 
 **Config resolution**: CLI arg > the profile's fragments, later ones first >
-hardcoded default. Applied consistently in both `run()` functions -- don't
-bypass it. There is no base config file: every run uses exactly one profile, and
-a profile is an ordered list of fragments.
+hardcoded default. CLI over config is resolved in `resolve_context`
+(`celily/src/context.rs`) -- don't bypass it. There is no base config file:
+every run uses exactly one profile, and a profile is an ordered list of
+fragments.
 
 There are two config-loading entry points, both on `Config`, both reading
 `~/.config/celily/profiles.toml` (required, validated as a whole by
