@@ -105,60 +105,65 @@ else gets NXDOMAIN without reaching the upstream resolver, which is the first
 ports and capabilities entirely. The `raw.dnsmasq` config is:
 `no-resolv\nno-poll\ncache-size=0\nserver=<gateway_ip>#<dns_port>\n`.
 
-**Config resolution**: CLI arg > profile config > inherited parent profiles >
-default config > hardcoded default. Applied consistently in both `run()`
-functions -- don't bypass it.
+**Config resolution**: CLI arg > the profile's fragments, later ones first >
+hardcoded default. Applied consistently in both `run()` functions -- don't
+bypass it. There is no base config file: every run uses exactly one profile,
+and a profile is an ordered list of fragments.
 
-There are three config-loading entry points, all on `Config`:
+There are two config-loading entry points, both on `Config`, both reading
+`~/.config/celily/profiles.toml` (required, validated as a whole by
+`ProfilesToml::validate`):
 
-- `Config::load_default()` -- loads `~/.config/celily/config.toml` (the file is
-  required; must contain `distro`).
-- `Config::load_with_profile(name)` -- loads default, then merges
-  `~/.config/celily/profiles/{name}.toml` over it.
-- `Config::load_for_dir(cwd)` -- loads default, then reads
-  `~/.config/celily/profiles.toml` (a `[profiles]` map of directory to profile
-  name), canonicalizes every key, and does longest-prefix matching against
-  `cwd`. The best match's profile is merged over the default. If the file is
-  missing or no entry matches, returns the default config unchanged.
+- `Config::load_with_profile(name)` -- the `[profiles]` entry `name`
+  (`--profile`).
+- `Config::load_for_dir(cwd)` -- canonicalizes every `[directories]` key and
+  takes the longest-prefix match against `cwd`. No match is an error: there is
+  no implicit default (`"/"` matches everything).
 
-**Config file permissions**: the config directory (`~/.config/celily`), profiles
-directory (`~/.config/celily/profiles`), and individual config/profile files are
-all validated on load -- must be owned by the current user and have no
+Both end in `Config::load_profile`, which merges
+`~/.config/celily/fragments/{name}.toml` for each listed fragment, in list
+order, into `Config::default()`, then requires `distro`.
+
+**Config file permissions**: the config directory (`~/.config/celily`),
+fragments directory (`~/.config/celily/fragments`), `profiles.toml` and fragment
+files are all validated on load -- must be owned by the current user and have no
 group/other permissions set (`mode & 0o0077 != 0` -> rejection).
 `validate_config_dirs()` checks the directories; `validate_node_permissions()`
 checks individual files. This is a security boundary; config is never
 bind-mounted into containers, so a compromised tool can't modify it. That
 permission audit is the verification.
 
-**Profile merging semantics** (in `Config::merge`):
+**Fragment merging semantics** (in `Config::merge`, applied once per fragment in
+list order):
 
-- Scalar fields: profile wins if present, otherwise default.
+- Scalar fields: the later fragment wins if present, otherwise the earlier
+  value stays.
 - Lists (`mounts`, `volumes`, `proxy`, `allowed_dirs`, `allowed_files`,
-  `pass_env`, `pre_run`): concatenated (default first, profile appended).
-  `pre_run` is a single string per file in TOML, collected into a list; every
-  script runs, in that order. The `allow` sub-list inside `[network]` is also
-  concatenated.
-- Maps (`env`): merged; profile keys override default keys for the same name.
+  `pass_env`, `pre_run`): concatenated in fragment order. `pre_run` is a single
+  string per file in TOML, collected into a list; every script runs, in that
+  order. The `allow` sub-list inside `[network]` is also concatenated.
+- Maps (`env`): merged; later fragments override earlier keys for the same name.
 - Nested tables (`backend`, `limits`, `network`, `worktree`): merged
   field-by-field with scalar override rules.
 
 If you add a new config field, add the merge logic in the appropriate
-sub-module's `merge()` function or it will silently never take effect from
-profiles.
+sub-module's `merge()` function or it will silently never take effect past the
+first fragment.
 
 **Boolean fields that default to true**: Use `Option<bool>`, merged with
-`profile_field.or(default_field)`, and resolve the default where it is consumed
-(`.unwrap_or(true)`; see `Config.secure_boot`). This lets a profile explicitly
+`later_field.or(earlier_field)`, and resolve the default where it is consumed
+(`.unwrap_or(true)`; see `Config.secure_boot`). This lets a fragment explicitly
 set `false` to disable something that defaults on. A plain `bool` with
 `#[serde(default)]` can't distinguish "not set" from "set to false", so
-`default || profile` would block profiles from turning the feature off. A serde
+`earlier || later` would block later fragments from turning the feature off. A serde
 default of `Some(true)` on a field of a nested table is wrong too: a file that
 has the table but omits the key then sets it, overriding an earlier `false`.
 
-**Config validation flow**: There is no automatic per-file or post-merge
-validation. If you add a validation rule, call it in `Config::load_file` (for
-per-file checks) or in `merge_with_profile` (for cross-file checks after
-merging).
+**Config validation flow**: `profiles.toml` is validated as a whole in
+`ProfilesToml::validate`; the merged profile only has to set `distro`
+(`Config::load_profile`). If you add a validation rule, call it in
+`Config::load_file` (for per-fragment checks) or in `Config::load_profile` (for
+checks on the merged result).
 
 **Mounts**: tilde expansion (`expand_host_tilde` / `expand_container_tilde`)
 happens before `validate_mount_source` is called, inside `resolve_context`.
@@ -238,10 +243,11 @@ into `man1/` and `man5/` under the manpath when installing.
 - Indented lines starting with `-` are parsed as list items; escape with `\-` if
   you need a literal dash at the start of an indented line
 
-## Config file
+## Config files
 
-`$XDG_CONFIG_HOME/celily/config.toml` (typically
-`~/.config/celily/config.toml`). The file is required and must contain at least
+`$XDG_CONFIG_HOME/celily/profiles.toml` (required) defines the profiles;
+`$XDG_CONFIG_HOME/celily/fragments/{name}.toml` hold the settings. Every
+fragment has the same schema; the merged profile must contain at least
 `distro`. The full schema is documented in `celily-config.5`.
 
 Notable fields (all at top level; no `[common]` / `[run]` nesting):
@@ -289,29 +295,37 @@ Notable fields (all at top level; no `[common]` / `[run]` nesting):
   in-process proxy; TCP rules by the bridge egress ACL. See `celily-config.5`
   for full schema.
 - `[worktree]` -- worktree mode configuration (user_name, user_email)
-- `pre_run` -- inline script run before the main command; one per file, all of
-  them run (default first), first failure aborts
+- `pre_run` -- inline script run before the main command; one per fragment, all
+  of them run (in fragment order), first failure aborts
 - `[[proxy]]` -- Unix socket proxy devices (host socket, listening in the
   instance); see `celily-config.5`
 
-### Profiles and profiles.toml
+### Profiles and fragments
 
-Named profiles live at `~/.config/celily/profiles/{name}.toml` and have the same
-schema as the main config. They are merged over the default config -- only the
-fields they set override.
-
-`~/.config/celily/profiles.toml` maps directories to profile names:
+`~/.config/celily/profiles.toml` defines profiles (ordered lists of fragments)
+and maps directories to them:
 
 ```toml
-[profiles]
+[directories]
+"/" = "base"
 "/home/user/project" = "work"
-"/home/user/project/oss" = "oss"
+
+[profiles]
+base = ["base"]
+work = ["base", "remote-docs", "work"]
 ```
 
-At launch (`Config::load_for_dir`), each key is canonicalized and the
-longest-prefix match against the current working directory determines the
-profile. If no entry matches, only the default config is used. `--profile` /
-`--no-profile` CLI flags bypass auto-detection entirely.
+There is no chaining: fragments include nothing, profiles include no other
+profile. Profile and fragment names are separate namespaces (`work` lists the
+`work` fragment). Rejected when loading `profiles.toml`: an empty list, a
+fragment listed twice, an invalid fragment name (it becomes a file name), a
+directory mapped to an undefined profile.
+
+At launch (`Config::load_for_dir`), each `[directories]` key is canonicalized
+and the longest-prefix match against the current working directory determines
+the profile. No match is an error. `--profile` bypasses auto-detection. There
+is no CLI flag to add or remove fragments: composition lives in
+`profiles.toml` only.
 
 ## Command resolution
 

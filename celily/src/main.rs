@@ -37,12 +37,9 @@ async fn run() -> anyhow::Result<i32> {
 
     let cwd = env::current_dir().context("failed to get current directory")?;
 
-    let cfg = if let Some(ref profile) = args.profile {
-        crate::config::Config::load_with_profile(profile)?
-    } else if args.no_profile {
-        crate::config::Config::load_default()?
-    } else {
-        crate::config::Config::load_for_dir(&cwd)?
+    let cfg = match args.profile {
+        Some(ref profile) => crate::config::Config::load_with_profile(profile)?,
+        None => crate::config::Config::load_for_dir(&cwd)?,
     };
 
     let home = PathBuf::from(env::var("HOME").context("$HOME is not set")?);

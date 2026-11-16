@@ -76,7 +76,7 @@ Optional:
 1. Build and publish a LXD/Incus image with the required packages (see
    `celily-config(5)` IMAGE REQUIREMENTS).
 
-1. Create config at `~/.config/celily/config.toml`:
+1. Create a configuration fragment at `~/.config/celily/fragments/base.toml`:
 
    ```toml
    distro = "arch"
@@ -107,6 +107,20 @@ Optional:
    }
    methods = ["POST"]
    ```
+
+1. Define a profile made of that fragment, and use it in every directory, in
+   `~/.config/celily/profiles.toml`:
+
+   ```toml
+   [directories]
+   "/" = "base"
+
+   [profiles]
+   base = ["base"]
+   ```
+
+   A profile is an ordered list of fragments: `rust = ["base", "rust"]` adds
+   `fragments/rust.toml` on top of the base for the `rust` profile.
 
 1. Run it:
 
@@ -177,5 +191,5 @@ Full documentation lives in the man pages:
 
 - `man/celily.1` -- CLI flags, mount security, environment handling, worktree
   mode
-- `man/celily-config.5` -- config file schema, sections, merging rules, profile
-  inheritance, image requirements
+- `man/celily-config.5` -- config file schema, sections, profiles and
+  fragments, merging rules, image requirements

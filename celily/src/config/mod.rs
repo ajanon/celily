@@ -118,9 +118,9 @@ pub struct Config {
     /// opt in, `false` to explicitly disable.
     pub mount_project: Option<bool>,
     /// Inline scripts run as the container user before the main command
-    /// (or `bash --login`). Each config file sets at most one; merging
-    /// appends them, so they run default first, then parent profiles,
-    /// then the profile. The first failure aborts the run.
+    /// (or `bash --login`). Each fragment sets at most one; merging
+    /// appends them, so they run in the order the profile lists its
+    /// fragments. The first failure aborts the run.
     /// Shebang-aware: each is written to a temp file and executed, so
     /// `#!/usr/bin/env python3` works. The same environment variables as
     /// the main command are set, plus `CELILY_USER`, `CELILY_UID`,
@@ -158,95 +158,127 @@ where
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProfilesToml {
-    profiles: HashMap<String, String>,
+    /// Directory -> profile name, longest prefix wins.
     #[serde(default)]
-    inherit: HashMap<String, String>,
+    directories: HashMap<String, String>,
+    /// Profile name -> fragment names, merged in list order.
+    profiles: HashMap<String, Vec<String>>,
+}
+
+impl ProfilesToml {
+    /// Read, parse and validate `profiles.toml` in `dir`. The file is
+    /// required: every config comes from a profile.
+    fn load(dir: &Path) -> Result<Self, ConfigError> {
+        let path = dir.join("profiles.toml");
+        if !path.exists() {
+            return Err(ConfigError::Validation(format!(
+                "{} not found; it defines the profiles celily runs with",
+                path.display(),
+            )));
+        }
+        validate_node_permissions(&path)?;
+        let content = std::fs::read_to_string(&path).map_err(|source| ConfigError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        let parsed: Self = toml::from_str(&content).map_err(|source| ConfigError::Parse {
+            path: path.clone(),
+            source,
+        })?;
+        parsed
+            .validate()
+            .map_err(|e| ConfigError::Validation(format!("{}: {e}", path.display())))?;
+        Ok(parsed)
+    }
+
+    /// Check the whole file, not only the profile about to be used: a
+    /// mistake shows up on the next run, not on the day a directory
+    /// happens to match. Fragment files are checked when loaded.
+    fn validate(&self) -> Result<(), String> {
+        for (profile, fragments) in &self.profiles {
+            if fragments.is_empty() {
+                return Err(format!("profile '{profile}' lists no fragments"));
+            }
+            let mut seen = HashSet::new();
+            for name in fragments {
+                if !is_valid_fragment_name(name) {
+                    return Err(format!(
+                        "profile '{profile}': invalid fragment name '{name}': must not be empty, \
+                         must not contain / or \\, must not be . or .."
+                    ));
+                }
+                if !seen.insert(name) {
+                    return Err(format!("profile '{profile}' lists fragment '{name}' twice"));
+                }
+            }
+        }
+        for (dir, profile) in &self.directories {
+            if !self.profiles.contains_key(profile) {
+                return Err(format!(
+                    "[directories] maps '{dir}' to profile '{profile}', which [profiles] does not \
+                     define"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// The profile of the longest `[directories]` entry containing
+    /// `cwd_canon`. Entries that cannot be canonicalized (e.g. on an
+    /// unmounted drive) are skipped.
+    fn profile_for_dir(&self, cwd_canon: &Path, home: &Path) -> Option<&str> {
+        let mut best_match: Option<(PathBuf, &str)> = None;
+        for (raw_path, name) in &self.directories {
+            let expanded = expand_host_tilde(Path::new(raw_path), home);
+            let canon = match expanded.canonicalize() {
+                Ok(p) => p,
+                Err(e) => {
+                    warn!(path = %raw_path, error = %e, "skipping [directories] entry: cannot canonicalize");
+                    continue;
+                },
+            };
+            let longer = best_match
+                .as_ref()
+                .is_none_or(|(best, _)| canon.components().count() > best.components().count());
+            if longer && is_under_or_eq(cwd_canon, &canon) {
+                best_match = Some((canon, name));
+            }
+        }
+        best_match.map(|(_, name)| name)
+    }
 }
 
 impl Config {
-    /// Load the global config from `~/.config/celily/config.toml`.
-    /// The config file is required.
-    pub fn load_default() -> Result<Self, ConfigError> {
-        validate_config_dirs()?;
-        let path = config_path();
-        if !path.exists() {
-            return Err(ConfigError::Validation(format!(
-                "{} not found; a config file with distro is required",
-                path.display(),
-            )));
-        }
-        let cfg = Self::load_file(&path)?;
-        if cfg.distro.is_none() {
-            return Err(ConfigError::Validation(format!(
-                "{}: distro is required (e.g. distro = \"arch\")",
-                path.display(),
-            )));
-        }
-        Ok(cfg)
-    }
-
-    /// Load the global config and merge a named profile over it.
-    /// Profile files live at `~/.config/celily/profiles/{name}.toml`.
-    /// If the profile has an `[inherit]` entry in `profiles.toml`, the
-    /// inheritance chain is walked transitively and merged from root
-    /// to leaf before the profile itself is merged.
+    /// Load the named profile from `~/.config/celily/profiles.toml`.
     pub fn load_with_profile(profile: &str) -> Result<Self, ConfigError> {
-        let default = Self::load_default()?;
-        let profiles_toml = load_profiles_toml()?;
-        Self::merge_with_profile(default, profile, &profiles_toml.inherit)
+        let dir = celily_config_dir();
+        validate_config_dirs(&dir)?;
+        let profiles = ProfilesToml::load(&dir)?;
+        Self::load_profile(&dir, &profiles, profile)
     }
 
-    /// Load the global config, then consult `~/.config/celily/profiles.toml`
-    /// for a directory->profile mapping. If `cwd` matches an entry
-    /// (longest-prefix), the corresponding profile is merged over the
-    /// default. If the profile has an `[inherit]` entry, the inheritance
-    /// chain is walked transitively and merged from root to leaf before
-    /// the profile itself is merged. If no mapping exists or no entry
-    /// matches, returns the default config unchanged.
+    /// Load the profile that `~/.config/celily/profiles.toml` maps to
+    /// `cwd` (longest `[directories]` prefix). No match is an error:
+    /// there is no implicit default, `"/"` maps every directory.
     pub fn load_for_dir(cwd: &Path) -> Result<Self, ConfigError> {
-        let default = Self::load_default()?;
+        let dir = celily_config_dir();
+        validate_config_dirs(&dir)?;
+        let profiles = ProfilesToml::load(&dir)?;
         let cwd_canon = cwd.canonicalize().map_err(|source| ConfigError::Io {
             path: cwd.to_path_buf(),
             source,
         })?;
-
-        let mapping = load_profiles_toml()?;
         let home = home_path()?;
-
-        let mut best_match: Option<(PathBuf, String)> = None;
-        for (raw_path, name) in &mapping.profiles {
-            if !is_valid_profile_name(name) {
-                warn!(%name, path = %raw_path, "skipping profiles.toml entry: invalid profile name");
-                continue;
-            }
-            let expanded = expand_host_tilde(Path::new(raw_path), &home);
-            let canon = match expanded.canonicalize() {
-                Ok(p) => p,
-                Err(e) => {
-                    warn!(path = %raw_path, error = %e, "skipping profiles.toml entry: cannot canonicalize");
-                    continue;
-                },
-            };
-            if is_under_or_eq(&cwd_canon, &canon) {
-                match &best_match {
-                    Some((best, _)) if canon.components().count() > best.components().count() => {
-                        best_match = Some((canon, name.clone()));
-                    },
-                    None => {
-                        best_match = Some((canon, name.clone()));
-                    },
-                    _ => {},
-                }
-            }
-        }
-
-        match best_match {
-            Some((_, profile)) => {
-                info!(%profile, "matched profile");
-                Self::merge_with_profile(default, &profile, &mapping.inherit)
-            },
-            None => Ok(default),
-        }
+        let Some(profile) = profiles.profile_for_dir(&cwd_canon, &home) else {
+            return Err(ConfigError::Validation(format!(
+                "no [directories] entry in {} matches {}; add one (\"/\" matches every directory) \
+                 or pass --profile",
+                dir.join("profiles.toml").display(),
+                cwd_canon.display(),
+            )));
+        };
+        info!(%profile, "matched profile");
+        Self::load_profile(&dir, &profiles, profile)
     }
 
     /// Read and parse a single config TOML file.
@@ -262,96 +294,45 @@ impl Config {
         })
     }
 
-    /// Load and validate a named profile, then merge it over `default`.
-    ///
-    /// If `inherit` maps the profile to a parent, the inheritance chain
-    /// is walked transitively: each profile in the chain inherits from
-    /// the next until a profile with no `[inherit]` entry is reached.
-    /// Profiles are merged from root to leaf so that child values
-    /// override parent values.  Self-inheritance and circular chains
-    /// are rejected.
-    fn merge_with_profile(
-        default: Config,
+    /// Merge the fragments of `profile` (`dir/fragments/NAME.toml`) in
+    /// list order: later fragments override earlier ones. The result
+    /// must set `distro`.
+    fn load_profile(
+        dir: &Path,
+        profiles: &ProfilesToml,
         profile: &str,
-        inherit: &HashMap<String, String>,
     ) -> Result<Self, ConfigError> {
-        if !is_valid_profile_name(profile) {
-            return Err(ConfigError::Validation(format!(
-                "invalid profile name '{profile}': must not be empty, must not contain / or \\\\, \
-                 must not be . or .."
-            )));
-        }
+        let fragments = profiles.profiles.get(profile).ok_or_else(|| {
+            ConfigError::Validation(format!(
+                "profile '{profile}' is not defined in [profiles] of {}",
+                dir.join("profiles.toml").display(),
+            ))
+        })?;
+        info!(%profile, fragments = %fragments.join(" "), "loading profile");
 
-        // Build the inheritance chain from leaf (profile) to root.
-        let mut chain: Vec<String> = Vec::new();
-        let mut visited = HashSet::new();
-        let mut current = profile.to_string();
-
-        loop {
-            if !visited.insert(current.clone()) {
-                return Err(ConfigError::Validation(format!(
-                    "circular inheritance: profile '{current}' appears more than once in the \
-                     inheritance chain"
-                )));
-            }
-            chain.push(current.clone());
-
-            match inherit.get(&current) {
-                Some(parent) => {
-                    if parent == &current {
-                        return Err(ConfigError::Validation(format!(
-                            "profile '{current}' cannot inherit from itself"
-                        )));
-                    }
-                    if !is_valid_profile_name(parent) {
-                        return Err(ConfigError::Validation(format!(
-                            "invalid parent profile name '{parent}' in [inherit] for '{current}': \
-                             must not be empty, must not contain / or \\\\, must not be . or .."
-                        )));
-                    }
-                    current = parent.clone();
-                },
-                None => break,
-            }
-        }
-
-        // Merge from root to leaf so child values override parents.
-        let mut merged = default;
-        for name in chain.iter().rev() {
-            let path = profile_path(name);
+        let mut merged = Config::default();
+        for name in fragments {
+            let path = dir.join("fragments").join(format!("{name}.toml"));
             if !path.exists() {
                 return Err(ConfigError::Validation(format!(
-                    "profile '{name}' not found at {}",
+                    "fragment '{name}' of profile '{profile}' not found at {}",
                     path.display(),
                 )));
             }
-            let cfg = Self::load_file(&path)?;
-            merged.merge(cfg);
+            merged.merge(Self::load_file(&path)?);
         }
 
+        if merged.distro.is_none() {
+            return Err(ConfigError::Validation(format!(
+                "profile '{profile}': distro is required; set it in one of its fragments (e.g. \
+                 distro = \"arch\")"
+            )));
+        }
         Ok(merged)
     }
 }
 
 // --- Path helpers (config-specific) ---
-
-/// Load and parse `profiles.toml`. Returns an empty `ProfilesToml` when
-/// the file does not exist.
-fn load_profiles_toml() -> Result<ProfilesToml, ConfigError> {
-    let path = profiles_toml_path();
-    if !path.exists() {
-        return Ok(ProfilesToml {
-            profiles: HashMap::new(),
-            inherit: HashMap::new(),
-        });
-    }
-    validate_node_permissions(&path)?;
-    let content = std::fs::read_to_string(&path).map_err(|source| ConfigError::Io {
-        path: path.clone(),
-        source,
-    })?;
-    toml::from_str(&content).map_err(|source| ConfigError::Parse { path, source })
-}
 
 /// Return the XDG config directory (`$XDG_CONFIG_HOME` or `~/.config`).
 pub fn config_dir() -> PathBuf {
@@ -366,27 +347,14 @@ pub fn config_dir() -> PathBuf {
         .unwrap_or_default()
 }
 
-/// Path to `~/.config/celily/config.toml`.
-fn config_path() -> PathBuf {
-    config_dir().join("celily").join("config.toml")
+/// `~/.config/celily`: `profiles.toml` and `fragments/`.
+fn celily_config_dir() -> PathBuf {
+    config_dir().join("celily")
 }
 
-/// Path to `~/.config/celily/profiles.toml`.
-fn profiles_toml_path() -> PathBuf {
-    config_dir().join("celily").join("profiles.toml")
-}
-
-/// Path to a named profile: `~/.config/celily/profiles/{name}.toml`.
-fn profile_path(name: &str) -> PathBuf {
-    config_dir()
-        .join("celily")
-        .join("profiles")
-        .join(format!("{name}.toml"))
-}
-
-/// Reject profile names that are empty, contain `/` or `\\`,
-/// or are `.` / `..`.
-fn is_valid_profile_name(name: &str) -> bool {
+/// Reject fragment names that are empty, contain `/` or `\\`,
+/// or are `.` / `..`: they become file names.
+fn is_valid_fragment_name(name: &str) -> bool {
     !name.is_empty() && !name.contains('/') && !name.contains('\\') && name != "." && name != ".."
 }
 
@@ -505,6 +473,106 @@ quota = { max_requests = 0, window = "1h" }
         }
         let err = toml::from_str::<ProfilesToml>("[profiles]\n[inherits]\n").err();
         assert!(err.is_some_and(|e| e.to_string().contains("unknown field")));
+    }
+
+    // -- profiles.toml --
+
+    fn profiles_toml(s: &str) -> ProfilesToml {
+        toml::from_str(s).unwrap()
+    }
+
+    #[test]
+    fn profiles_toml_validation() {
+        let ok = "[directories]\n\"/\" = \"p\"\n[profiles]\np = [\"base\", \"p\"]\n";
+        assert_eq!(profiles_toml(ok).validate(), Ok(()));
+
+        for (toml, expected) in [
+            ("[profiles]\np = []", "lists no fragments"),
+            (
+                "[profiles]\np = [\"a\", \"b\", \"a\"]",
+                "lists fragment 'a' twice",
+            ),
+            ("[profiles]\np = [\"../a\"]", "invalid fragment name '../a'"),
+            ("[profiles]\np = [\"..\"]", "invalid fragment name '..'"),
+            (
+                "[directories]\n\"/\" = \"q\"\n[profiles]\np = [\"a\"]",
+                "'q', which [profiles]",
+            ),
+        ] {
+            let err = profiles_toml(toml).validate().unwrap_err();
+            assert!(err.contains(expected), "{toml}: {err}");
+        }
+
+        // The old single-parent form no longer parses.
+        assert!(toml::from_str::<ProfilesToml>("[profiles]\np = \"a\"").is_err());
+        assert!(toml::from_str::<ProfilesToml>("[profiles]\n[inherit]\np = \"a\"").is_err());
+    }
+
+    /// Longest prefix wins, `"/"` catches everything else, entries that
+    /// do not exist are skipped.
+    #[test]
+    fn profile_for_dir_longest_prefix() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        std::fs::create_dir_all(root.join("a/b")).unwrap();
+        let profiles = profiles_toml(&format!(
+            "[directories]\n\"/\" = \"all\"\n\"{a}\" = \"a\"\n\"{gone}\" = \
+             \"gone\"\n[profiles]\nall = [\"x\"]\na = [\"x\"]\ngone = [\"x\"]\n",
+            a = root.join("a").display(),
+            gone = root.join("gone").display(),
+        ));
+        let home = Path::new("/nonexistent-home");
+        assert_eq!(profiles.profile_for_dir(&root.join("a/b"), home), Some("a"));
+        assert_eq!(profiles.profile_for_dir(&root.join("a"), home), Some("a"));
+        assert_eq!(profiles.profile_for_dir(&root, home), Some("all"));
+
+        let no_catch_all = profiles_toml(&format!(
+            "[directories]\n\"{a}\" = \"a\"\n[profiles]\na = [\"x\"]\n",
+            a = root.join("a").display(),
+        ));
+        assert_eq!(no_catch_all.profile_for_dir(&root, home), None);
+    }
+
+    /// Fragments merge in list order, from `dir/fragments/NAME.toml`.
+    #[test]
+    fn load_profile_merges_fragments_in_order() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        std::fs::create_dir(dir.join("fragments")).unwrap();
+        for (name, content) in [
+            (
+                "base",
+                "distro = \"arch\"\nimage = \"base\"\npre_run = \"base\"",
+            ),
+            ("x", "image = \"x\"\npre_run = \"x\""),
+        ] {
+            let path = dir.join("fragments").join(format!("{name}.toml"));
+            std::fs::write(&path, content).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        let profiles = profiles_toml(
+            "[profiles]\nbx = [\"base\", \"x\"]\nxb = [\"x\", \"base\"]\nx = [\"x\"]\nmissing = \
+             [\"base\", \"nope\"]\n",
+        );
+
+        let cfg = Config::load_profile(dir, &profiles, "bx").unwrap();
+        assert_eq!(cfg.image.as_deref(), Some("x"));
+        assert_eq!(cfg.pre_run, ["base", "x"]);
+
+        let cfg = Config::load_profile(dir, &profiles, "xb").unwrap();
+        assert_eq!(cfg.image.as_deref(), Some("base"));
+        assert_eq!(cfg.pre_run, ["x", "base"]);
+
+        for (profile, expected) in [
+            ("x", "distro is required"),
+            ("missing", "fragment 'nope' of profile 'missing' not found"),
+            ("undefined", "profile 'undefined' is not defined"),
+        ] {
+            let err = Config::load_profile(dir, &profiles, profile).unwrap_err();
+            assert!(err.to_string().contains(expected), "{profile}: {err}");
+        }
     }
 
     // -- Merge tests (derive + strategies) --

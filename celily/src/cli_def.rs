@@ -77,14 +77,10 @@ pub struct Args {
     #[arg(long = "project-target", value_name = "PATH")]
     pub project_target: Option<String>,
 
-    /// Use the named profile (merges ~/.config/celily/profiles/<profile>.toml
-    /// over default config)
+    /// Use the named profile of ~/.config/celily/profiles.toml instead of
+    /// the one mapped to the current directory
     #[arg(long = "profile", value_name = "NAME")]
     pub profile: Option<String>,
-
-    /// Skip profile auto-detection; use only the default config
-    #[arg(long, conflicts_with = "profile")]
-    pub no_profile: bool,
 
     /// Arguments to run inside the container (pass after --)
     #[arg(last = true, allow_hyphen_values = true)]

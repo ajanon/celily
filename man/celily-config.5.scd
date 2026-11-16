@@ -14,32 +14,66 @@ or table, is an error: a typo never silently falls back to a default.
 
 # FILE LAYOUT
 
-*$XDG_CONFIG_HOME/celily/config.toml*
-	Global configuration file providing default values for all settings.
-	The config file is required.
-
 *$XDG_CONFIG_HOME/celily/profiles.toml*
-	Optional mapping of directory paths to profile names. Each entry maps a
-	path (with optional tilde expansion) to a profile name. When *celily*
-	runs, it matches the current working directory against these entries
-	(longest prefix wins) and loads the corresponding profile. Missing file
-	or missing entries mean no profile is applied.
+	Required. Defines the profiles, and the directories they apply to
+	(see *PROFILES* below).
 
-	Example:
+*$XDG_CONFIG_HOME/celily/fragments/*_NAME_*.toml*
+	Configuration fragments, with the schema described from *TOP-LEVEL
+	KEYS* on. A fragment is never used on its own: profiles list the
+	fragments they are made of.
+
+# PROFILES
+
+A profile is a named, ordered list of fragments. *celily* always runs
+with exactly one profile; there is no implicit base configuration.
+_profiles.toml_ holds two tables:
+
+*[profiles]*
+	Maps each profile name to the fragments it is made of, merged in
+	list order. A profile lists at least one fragment, and each fragment
+	at most once.
+
+*[directories]*
+	Maps directory paths (a leading *~* expands to *$HOME*) to profile
+	names. *celily* matches the current working directory against these
+	entries, and the longest matching path wins. The path _"/"_ matches
+	every directory. Entries that cannot be resolved (e.g. a path on an
+	unmounted drive) are skipped with a warning. When no entry matches,
+	*celily* refuses to run: add an entry, or select a profile with
+	*--profile*.
+
+Example:
 ```
-[profiles]
+[directories]
+"/" = "base"
+"~/Projects" = "projects"
 "~/Projects/work" = "work"
-"~/Projects/opensource" = "oss"
+
+[profiles]
+base = ["base"]
+projects = ["base", "remote-docs", "pi-settings", "projects"]
+work = ["base", "remote-docs", "pi-settings", "work"]
 ```
 
-	An optional _[inherit]_ section in the same file declares
-	profile inheritance (see *[inherit] SECTION* below).
+A command run in _~/Projects/work/celily_ uses the _work_ profile: it
+merges _fragments/base.toml_, _fragments/remote-docs.toml_,
+_fragments/pi-settings.toml_ and _fragments/work.toml_, in that order.
+Profile names and fragment names do not collide: the _projects_ profile
+lists a _projects_ fragment holding the settings only it uses.
 
-*$XDG_CONFIG_HOME/celily/profiles/*_NAME_*.toml*
-	Profile configuration files. Each has the same schema as _config.toml_
-	(see below). The profile is merged _over_ the default config: profile
-	values override defaults, lists are extended, and maps are merged.
-	Missing profile files referenced from _profiles.toml_ are a hard error.
+Fragments do not include other fragments, and profiles do not include
+other profiles: each profile spells out its whole list. Lists are only
+ever extended (see *MERGING RULES*), so leaving a fragment out of a
+profile is the way to keep its settings out.
+
+*Errors*
+	_profiles.toml_ is checked as a whole on every run, not only the
+	selected profile. An empty fragment list, a fragment listed twice, an
+	invalid fragment name (empty, containing / or \\, . or ..) and a
+	directory mapped to an undefined profile are errors. A fragment of
+	the selected profile missing on disk is an error, and the merged
+	profile must set _distro_.
 
 # PRIORITY
 
@@ -47,13 +81,9 @@ Configuration is resolved in this order (lower overrides higher):
 
 *1. Hardcoded defaults*
 
-*2. Global config* (_config.toml_)
+*2. Fragments of the profile*, in the order the profile lists them
 
-*3. Parent profiles* (if _[inherit]_ declares a chain), from root parent to direct parent
-
-*4. Profile config* (_profiles/NAME.toml_)
-
-*5. CLI arguments*
+*3. CLI arguments*
 
 # SECURITY MODEL
 
@@ -64,70 +94,37 @@ are no per-project config files, and there is no environment variable
 that can redirect the configuration path.
 
 Because the entire configuration tree is trusted, every field can be
-merged from profiles without restriction. Lists are additive, maps are
-merged (profile keys take precedence), and scalars are overridden.
+set by any fragment without restriction. Lists are additive, maps are
+merged (later keys take precedence), and scalars are overridden.
 
 # MERGING RULES
 
-When a profile is loaded, its values are merged over the default config
-with the following rules:
+The fragments of a profile are merged in list order, each over the
+result of the previous ones, with the following rules:
 
 *Scalars*
-	Profile value wins if present; otherwise the default value is used.
+	The later fragment's value wins if present; otherwise the earlier
+	value is kept.
 
 *Lists*
-	Lists from the default and profile are concatenated (default first,
-	profile appended). This applies to _mounts_, _volumes_, _proxy_,
-	_network.allow_, _allowed_dirs_, _allowed_files_, _pass_env_, and
-	_pre_run_ (a single script per file, collected into a list).
+	Lists are concatenated in fragment order. This applies to _mounts_,
+	_volumes_, _proxy_, _network.allow_, _allowed_dirs_, _allowed_files_,
+	_pass_env_, and _pre_run_ (a single script per fragment, collected
+	into a list).
 
 *Maps*
-	Maps from the default and profile are merged; profile entries with the
-	same key override default entries. This applies to _env_.
+	Maps are merged; a later fragment's entries override earlier entries
+	with the same key. This applies to _env_.
 
 *Nested tables*
 	Fields within _limits_ and _worktree_ are merged field-by-field
 	using the same scalar override rules.
 
-# [inherit] SECTION
-
-The optional _[inherit]_ section in _profiles.toml_ declares
-profile inheritance. Each entry maps a profile name to its parent.
-Transitive chains are supported: if _work_ inherits from
-_base_, and _base_ inherits from _common_, then
-_work_ receives settings from both _common_ and _base_
-(with _work_ taking highest priority).
-
-Example:
-
-```
-[inherit]
-common = "minimal"
-base = "common"
-work = "base"
-```
-
-When a profile has an _[inherit]_ entry, the entire inheritance
-chain is walked and each profile is merged from root to leaf. For the
-example above the merge order is:
-
-	default _config.toml_ -> _minimal_ -> _common_ -> _base_ -> _work_
-
-*Errors*
-	A profile cannot inherit from itself. A circular chain (e.g. _a_
-	inherits _b_ which inherits _a_) produces a hard error. Every
-	profile in the chain must exist on disk and have valid permissions.
-
-*Resolution*
-	Both *--profile* and profile auto-detection (via the
-	_[profiles]_ directory mapping) resolve inheritance. The
-	_[inherit]_ section is consulted whenever a profile is loaded,
-	regardless of how it was selected.
-
 # TOP-LEVEL KEYS
 
 *distro* = _string_
-	*Required.* Distribution the image is based on. Supported distros:
+	*Required*: one of the profile's fragments must set it. Distribution
+	the image is based on. Supported distros:
 	- *arch* (Arch Linux)
 
 	Example: _distro = "arch"_
@@ -198,10 +195,10 @@ Settings for *celily*(1). All fields are optional.
 	command are set (including proxy vars, _[env]_,
 	_[pass_env]_, and *HOME*).
 
-	Each config file sets at most one script. Profile merging does not
-	replace it: scripts from the default config, parent profiles, and the
-	profile all run, in that order, each as its own executable. The first
-	non-zero exit stops the remaining scripts and aborts the run.
+	Each fragment sets at most one script. Merging does not replace it:
+	the scripts of all the profile's fragments run, in fragment order,
+	each as its own executable. The first non-zero exit stops the
+	remaining scripts and aborts the run.
 
 	Use for per-run setup that needs to happen before the command executes:
 	refreshing credentials from a host-mounted socket, running a health
@@ -451,8 +448,8 @@ Deleting the instance leaves them untouched.
 	Set to *"readwrite"* for read-write access. Default: *"readonly"*.
 
 A volume is shared by every instance it is attached to: what one sandbox
-writes, the next one reads. Attach it in the profiles that should share
-it, not in a parent profile that every other profile inherits.
+writes, the next one reads. Attach it in a fragment that only the
+profiles sharing it list, not in one that every profile lists.
 
 Example, a coding agent's session history with daily snapshots kept four
 weeks. Create the volume:
@@ -461,7 +458,7 @@ lxc storage volume create --project celily default pi-sessions-work \\
     size=1GiB snapshots.schedule=@daily snapshots.expiry=4w
 ```
 
-Attach it in the profile:
+Attach it in a fragment:
 ```
 [[volumes]]
 name = "pi-sessions-work"

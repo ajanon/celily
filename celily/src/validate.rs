@@ -137,8 +137,8 @@ pub fn validate_mount_source(
 ) -> Result<PathBuf> {
     if allowed_dirs.is_empty() && allowed_files.is_empty() {
         bail!(
-            "allowed_dirs and allowed_files are empty: configure at least one in \
-             ~/.config/celily/config.toml"
+            "allowed_dirs and allowed_files are empty: configure at least one in a fragment of \
+             the profile (~/.config/celily/fragments)"
         );
     }
 
@@ -514,7 +514,7 @@ mod tests {
         std::fs::create_dir_all(home.join("Projects")).unwrap();
         std::fs::create_dir_all(&config).unwrap();
         std::fs::create_dir_all(&celily_dir).unwrap();
-        std::fs::write(celily_dir.join("config.toml"), "").unwrap();
+        std::fs::write(celily_dir.join("profiles.toml"), "").unwrap();
         std::fs::create_dir_all(&nvim_dir).unwrap();
         std::fs::create_dir_all(&projects_dir).unwrap();
         std::fs::create_dir_all(&ssh_dir).unwrap();
@@ -592,7 +592,7 @@ mod tests {
 
         // Reject anything under ~/.config/celily
         let err = validate_mount_source(
-            &celily_dir.join("config.toml"),
+            &celily_dir.join("profiles.toml"),
             &canon_home,
             &forbidden,
             &canon_allowed,

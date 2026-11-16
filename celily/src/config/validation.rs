@@ -30,17 +30,16 @@ pub(super) fn validate_node_permissions(path: &Path) -> Result<(), ConfigError> 
     Ok(())
 }
 
-/// Verify that the celily config directory and profiles directory (if they
-/// exist) are owned by the current user and have no group/other permissions
-/// set.
-pub(super) fn validate_config_dirs() -> Result<(), ConfigError> {
-    let dir = super::config_dir().join("celily");
+/// Verify that the celily config directory `dir` and its fragments
+/// directory (if they exist) are owned by the current user and have no
+/// group/other permissions set.
+pub(super) fn validate_config_dirs(dir: &Path) -> Result<(), ConfigError> {
     if dir.exists() {
-        validate_node_permissions(&dir)?;
+        validate_node_permissions(dir)?;
     }
-    let profiles_dir = dir.join("profiles");
-    if profiles_dir.exists() {
-        validate_node_permissions(&profiles_dir)?;
+    let fragments_dir = dir.join("fragments");
+    if fragments_dir.exists() {
+        validate_node_permissions(&fragments_dir)?;
     }
     Ok(())
 }
