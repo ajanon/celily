@@ -161,10 +161,10 @@ that has the table but omits the key then sets it, overriding an earlier
 `false`.
 
 **Config validation flow**: `profiles.toml` is validated as a whole in
-`ProfilesToml::validate`; the merged profile only has to set `distro`
-(`Config::load_profile`). If you add a validation rule, call it in
-`Config::load_file` (for per-fragment checks) or in `Config::load_profile` (for
-checks on the merged result).
+`ProfilesToml::validate` and `ProfilesToml::check_fragments`; the merged profile
+only has to set `distro` (`Config::load_profile`). If you add a validation rule,
+call it in `Config::load_file` (for per-fragment checks) or in
+`Config::load_profile` (for checks on the merged result).
 
 **Mounts**: tilde expansion (`expand_host_tilde` / `expand_container_tilde`)
 happens before `validate_mount_source` is called, inside `resolve_context`.
@@ -322,7 +322,9 @@ profile. Profile and fragment names are separate namespaces (`work` lists the
 fragment listed twice, an invalid fragment name (it becomes a file name), a
 relative `[directories]` key (it would resolve against the cwd: `"."` matches
 everywhere; `~` and `~/` are expanded, `~user` is not), a directory mapped to an
-undefined profile.
+undefined profile, a fragment missing on disk (in any profile:
+`ProfilesToml::check_fragments`; unlike a missing `allowed_dirs` entry, which
+only warns, a fragment cannot legitimately disappear).
 
 At launch (`Config::load_for_dir`), each `[directories]` key is canonicalized
 and the longest-prefix match against the current working directory determines

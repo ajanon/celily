@@ -77,8 +77,8 @@ profile is the way to keep its settings out.
 	undefined profile are errors. Without
 	*--profile*, so are two directories resolving to the same path with
 	different profiles, whether they match the current directory or not.
-	A fragment of the selected profile missing on disk is an error, and
-	the merged profile must set _distro_.
+	A fragment missing on disk is an error, whichever profile lists it.
+	The merged profile must set _distro_.
 
 # PRIORITY
 
