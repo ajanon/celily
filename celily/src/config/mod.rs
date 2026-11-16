@@ -326,7 +326,6 @@ impl Config {
                 cwd_canon.display(),
             )));
         };
-        info!(%profile, "matched profile");
         Self::load_profile(&dir, &profiles, profile)
     }
 
