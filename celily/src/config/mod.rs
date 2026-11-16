@@ -214,6 +214,14 @@ impl ProfilesToml {
             }
         }
         for (dir, profile) in &self.directories {
+            // A relative key would resolve against wherever celily runs:
+            // "." would match every directory, and beat every ancestor.
+            let home_relative = dir == "~" || dir.starts_with("~/");
+            if !home_relative && !Path::new(dir).is_absolute() {
+                return Err(format!(
+                    "[directories] key '{dir}' must be an absolute path, or start with ~/"
+                ));
+            }
             if !self.profiles.contains_key(profile) {
                 return Err(format!(
                     "[directories] maps '{dir}' to profile '{profile}', which [profiles] does not \
@@ -504,7 +512,8 @@ quota = { max_requests = 0, window = "1h" }
 
     #[test]
     fn profiles_toml_validation() {
-        let ok = "[directories]\n\"/\" = \"p\"\n[profiles]\np = [\"base\", \"p\"]\n";
+        let ok = "[directories]\n\"/\" = \"p\"\n\"~\" = \"p\"\n\"~/a\" = \"p\"\n[profiles]\np = \
+                  [\"base\", \"p\"]\n";
         assert_eq!(profiles_toml(ok).validate(), Ok(()));
 
         for (toml, expected) in [
@@ -522,6 +531,13 @@ quota = { max_requests = 0, window = "1h" }
         ] {
             let err = profiles_toml(toml).validate().unwrap_err();
             assert!(err.contains(expected), "{toml}: {err}");
+        }
+
+        // Relative keys resolve against the cwd; ~user is not expanded.
+        for dir in ["", ".", "./a", "a", "~a", "~alexis/a"] {
+            let toml = format!("[directories]\n\"{dir}\" = \"p\"\n[profiles]\np = [\"a\"]");
+            let err = profiles_toml(&toml).validate().unwrap_err();
+            assert!(err.contains("must be an absolute path"), "{dir}: {err}");
         }
 
         // The old single-parent form no longer parses.

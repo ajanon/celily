@@ -320,7 +320,9 @@ There is no chaining: fragments include nothing, profiles include no other
 profile. Profile and fragment names are separate namespaces (`work` lists the
 `work` fragment). Rejected when loading `profiles.toml`: an empty list, a
 fragment listed twice, an invalid fragment name (it becomes a file name), a
-directory mapped to an undefined profile.
+relative `[directories]` key (it would resolve against the cwd: `"."` matches
+everywhere; `~` and `~/` are expanded, `~user` is not), a directory mapped to an
+undefined profile.
 
 At launch (`Config::load_for_dir`), each `[directories]` key is canonicalized
 and the longest-prefix match against the current working directory determines
