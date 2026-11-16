@@ -7,6 +7,7 @@ pub mod validation;
 pub mod volume;
 pub mod worktree;
 
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -225,9 +226,12 @@ impl ProfilesToml {
 
     /// The profile of the longest `[directories]` entry containing
     /// `cwd_canon`. Entries that cannot be canonicalized (e.g. on an
-    /// unmounted drive) are skipped.
-    fn profile_for_dir(&self, cwd_canon: &Path, home: &Path) -> Option<&str> {
-        let mut best_match: Option<(PathBuf, &str)> = None;
+    /// unmounted drive) are skipped. Two entries resolving to the same
+    /// directory (`~/w`, `/home/me/w/`) must map to the same profile,
+    /// whether they match `cwd_canon` or not: the winner of such a tie
+    /// would depend on the hash order, which changes on every run.
+    fn profile_for_dir(&self, cwd_canon: &Path, home: &Path) -> Result<Option<&str>, String> {
+        let mut resolved: HashMap<PathBuf, (&str, &str)> = HashMap::new();
         for (raw_path, name) in &self.directories {
             let expanded = expand_host_tilde(Path::new(raw_path), home);
             let canon = match expanded.canonicalize() {
@@ -237,14 +241,28 @@ impl ProfilesToml {
                     continue;
                 },
             };
-            let longer = best_match
-                .as_ref()
-                .is_none_or(|(best, _)| canon.components().count() > best.components().count());
-            if longer && is_under_or_eq(cwd_canon, &canon) {
-                best_match = Some((canon, name));
+            match resolved.entry(canon) {
+                Entry::Occupied(e) if e.get().1 != name => {
+                    let (other_path, other_name) = e.get();
+                    return Err(format!(
+                        "[directories] entries '{other_path}' and '{raw_path}' both resolve to \
+                         {}, but map to different profiles ('{other_name}' and '{name}')",
+                        e.key().display(),
+                    ));
+                },
+                Entry::Occupied(_) => {},
+                Entry::Vacant(e) => {
+                    e.insert((raw_path, name));
+                },
             }
         }
-        best_match.map(|(_, name)| name)
+        // Matching entries are all ancestors of `cwd_canon`, distinct
+        // after the check above: their lengths differ, no tie is left.
+        Ok(resolved
+            .into_iter()
+            .filter(|(canon, _)| is_under_or_eq(cwd_canon, canon))
+            .max_by_key(|(canon, _)| canon.components().count())
+            .map(|(_, (_, name))| name))
     }
 }
 
@@ -269,7 +287,10 @@ impl Config {
             source,
         })?;
         let home = home_path()?;
-        let Some(profile) = profiles.profile_for_dir(&cwd_canon, &home) else {
+        let profile = profiles.profile_for_dir(&cwd_canon, &home).map_err(|e| {
+            ConfigError::Validation(format!("{}: {e}", dir.join("profiles.toml").display()))
+        })?;
+        let Some(profile) = profile else {
             return Err(ConfigError::Validation(format!(
                 "no [directories] entry in {} matches {}; add one (\"/\" matches every directory) \
                  or pass --profile",
@@ -522,15 +543,52 @@ quota = { max_requests = 0, window = "1h" }
             gone = root.join("gone").display(),
         ));
         let home = Path::new("/nonexistent-home");
-        assert_eq!(profiles.profile_for_dir(&root.join("a/b"), home), Some("a"));
-        assert_eq!(profiles.profile_for_dir(&root.join("a"), home), Some("a"));
-        assert_eq!(profiles.profile_for_dir(&root, home), Some("all"));
+        assert_eq!(
+            profiles.profile_for_dir(&root.join("a/b"), home),
+            Ok(Some("a"))
+        );
+        assert_eq!(
+            profiles.profile_for_dir(&root.join("a"), home),
+            Ok(Some("a"))
+        );
+        assert_eq!(profiles.profile_for_dir(&root, home), Ok(Some("all")));
 
         let no_catch_all = profiles_toml(&format!(
             "[directories]\n\"{a}\" = \"a\"\n[profiles]\na = [\"x\"]\n",
             a = root.join("a").display(),
         ));
-        assert_eq!(no_catch_all.profile_for_dir(&root, home), None);
+        assert_eq!(no_catch_all.profile_for_dir(&root, home), Ok(None));
+    }
+
+    /// Two entries resolving to one directory: fine with one profile, an
+    /// error with two, even when `cwd` is elsewhere.
+    #[test]
+    fn profile_for_dir_aliases() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        std::fs::create_dir_all(root.join("a")).unwrap();
+        std::fs::create_dir_all(root.join("elsewhere")).unwrap();
+        let home = root.as_path();
+        let with = |first: &str, second: &str| {
+            profiles_toml(&format!(
+                "[directories]\n\"/\" = \"all\"\n\"~/a\" = \"{first}\"\n\"{a}/\" = \
+                 \"{second}\"\n[profiles]\nall = [\"x\"]\na = [\"x\"]\nb = [\"x\"]\n",
+                a = root.join("a").display(),
+            ))
+        };
+
+        assert_eq!(
+            with("a", "a").profile_for_dir(&root.join("a"), home),
+            Ok(Some("a"))
+        );
+        for cwd in [root.join("a"), root.join("elsewhere")] {
+            let err = with("a", "b").profile_for_dir(&cwd, home).unwrap_err();
+            assert!(
+                err.contains("different profiles"),
+                "{}: {err}",
+                cwd.display()
+            );
+        }
     }
 
     /// Fragments merge in list order, from `dir/fragments/NAME.toml`.

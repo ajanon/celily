@@ -324,9 +324,10 @@ directory mapped to an undefined profile.
 
 At launch (`Config::load_for_dir`), each `[directories]` key is canonicalized
 and the longest-prefix match against the current working directory determines
-the profile. No match is an error. `--profile` bypasses auto-detection. There is
-no CLI flag to add or remove fragments: composition lives in `profiles.toml`
-only.
+the profile. No match is an error. So are two keys canonicalizing to the same
+path with different profiles, matching or not: `HashMap` order (random per
+process) would pick the winner. `--profile` bypasses auto-detection. There is no
+CLI flag to add or remove fragments: composition lives in `profiles.toml` only.
 
 ## Command resolution
 

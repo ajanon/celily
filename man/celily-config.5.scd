@@ -39,7 +39,9 @@ _profiles.toml_ holds two tables:
 	names. *celily* matches the current working directory against these
 	entries, and the longest matching path wins. The path _"/"_ matches
 	every directory. Entries that cannot be resolved (e.g. a path on an
-	unmounted drive) are skipped with a warning. When no entry matches,
+	unmounted drive) are skipped with a warning. Entries resolving to the
+	same directory (_"~/work"_ and _"/home/me/work/"_, or through a
+	symlink) must map to the same profile. When no entry matches,
 	*celily* refuses to run: add an entry, or select a profile with
 	*--profile*.
 
@@ -71,9 +73,11 @@ profile is the way to keep its settings out.
 	_profiles.toml_ is checked as a whole on every run, not only the
 	selected profile. An empty fragment list, a fragment listed twice, an
 	invalid fragment name (empty, containing / or \\, . or ..) and a
-	directory mapped to an undefined profile are errors. A fragment of
-	the selected profile missing on disk is an error, and the merged
-	profile must set _distro_.
+	directory mapped to an undefined profile are errors. Without
+	*--profile*, so are two directories resolving to the same path with
+	different profiles, whether they match the current directory or not.
+	A fragment of the selected profile missing on disk is an error, and
+	the merged profile must set _distro_.
 
 # PRIORITY
 
