@@ -1,9 +1,9 @@
-/// Merge strategy for `Option<T>` fields: profile wins when set.
+/// Merge strategy for `Option<T>` fields: the later fragment wins when set.
 ///
 /// Use with `#[merge(strategy = ...)]` on `Option<T>` fields in
 /// `#[derive(merge::Merge)]` structs.  When `right` is `Some`, it
 /// overwrites `left`; otherwise `left` is unchanged.  This gives
-/// profile values precedence over defaults.
+/// later fragments of a profile precedence over earlier ones.
 pub fn overwrite_some<T>(left: &mut Option<T>, right: Option<T>) {
     if right.is_some() {
         *left = right;

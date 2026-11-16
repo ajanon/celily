@@ -113,7 +113,7 @@ fragments.
 
 There are two config-loading entry points, both on `Config`, both reading
 `~/.config/celily/profiles.toml` (required, validated as a whole by
-`ProfilesToml::validate`):
+`ProfilesToml::load`):
 
 - `Config::load_with_profile(name)` -- the `[profiles]` entry `name`
   (`--profile`).
