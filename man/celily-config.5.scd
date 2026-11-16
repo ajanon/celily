@@ -122,8 +122,8 @@ result of the previous ones, with the following rules:
 	with the same key. This applies to _env_.
 
 *Nested tables*
-	Fields within _limits_ and _worktree_ are merged field-by-field
-	using the same scalar override rules.
+	Fields within _backend_, _limits_ and _worktree_ are merged
+	field-by-field using the same scalar override rules.
 
 # TOP-LEVEL KEYS
 
