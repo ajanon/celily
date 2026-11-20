@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use celily_lib::backend::lxd::LxcBackend;
-use celily_lib::{Instance, Limits, NetworkParams, SecretProvider};
+use celily_lib::{ExecStdio, Instance, Limits, NetworkParams, SecretProvider};
 use clap::Parser;
 use tracing::info;
 use tracing::level_filters::LevelFilter;
@@ -166,7 +166,8 @@ async fn run() -> anyhow::Result<i32> {
     let mut env_map = ctx.env_map.clone();
 
     // Pre-run scripts, in merge order (default first). Already trimmed and
-    // non-empty. The first failure aborts the run.
+    // non-empty. The first failure aborts the run. Off the command's stdin
+    // and stdout: a consumer's first input or a JSONL stream stays intact.
     for script in &cfg.pre_run {
         let wrapper = format!(
             "cat > /tmp/celily-pre-run <<'CELILY_EOF'\n{script}\nCELILY_EOF\nchmod +x \
@@ -178,6 +179,7 @@ async fn run() -> anyhow::Result<i32> {
                 &["sh".into(), "-c".into(), wrapper],
                 &env_map,
                 Some(&ctx.project_dir),
+                ExecStdio::Setup,
             )
             .await?;
         if code != 0 {
@@ -234,13 +236,23 @@ async fn run() -> anyhow::Result<i32> {
         );
 
         let result = running
-            .exec(&full_cmd, &env_map, Some(&ctx.project_dir))
+            .exec(
+                &full_cmd,
+                &env_map,
+                Some(&ctx.project_dir),
+                ExecStdio::Inherit,
+            )
             .await;
         remote.unregister(&cwd).await;
         result?
     } else {
         running
-            .exec(&raw_command, &env_map, Some(&ctx.project_dir))
+            .exec(
+                &raw_command,
+                &env_map,
+                Some(&ctx.project_dir),
+                ExecStdio::Inherit,
+            )
             .await?
     };
 

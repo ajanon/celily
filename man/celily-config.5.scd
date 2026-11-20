@@ -200,6 +200,11 @@ Settings for *celily*(1). All fields are optional.
 	command are set (including proxy vars, _[env]_,
 	_[pass_env]_, and *HOME*).
 
+	The script never touches the command's stdin and stdout, and never runs
+	in a terminal: its stdin is empty (*/dev/null*) and its stdout goes to
+	the stderr of *celily*, like its stderr. Input meant for the command,
+	or its piped output, stays intact.
+
 	Each fragment sets at most one script. Merging does not replace it:
 	the scripts of all the profile's fragments run, in fragment order,
 	each as its own executable. The first non-zero exit stops the

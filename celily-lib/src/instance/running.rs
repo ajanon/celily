@@ -3,7 +3,7 @@ use std::ffi::OsString;
 use std::path::Path;
 
 use super::{Instance, InstanceError, InstanceGuard};
-use crate::backend::{InstanceBackend, NetworkBackend};
+use crate::backend::{ExecStdio, InstanceBackend, NetworkBackend};
 use crate::network::NetworkIsolation;
 
 // ---------------------------------------------------------------------------
@@ -37,6 +37,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Running<IB>> {
         command: &[String],
         env: &HashMap<String, String>,
         cwd: Option<&Path>,
+        stdio: ExecStdio,
     ) -> Result<i32, InstanceError<IB::Error>> {
         let proxy_url = format!(
             "http://{}:{}",
@@ -55,6 +56,7 @@ impl<IB: InstanceBackend, NB: NetworkBackend> Instance<IB, NB, Running<IB>> {
                 self.config.exec_gid,
                 Some(&self.config.container_home),
                 Some(&proxy_url),
+                stdio,
             )
             .await
             .map_err(|e| InstanceError::backend("failed to run lxc exec", e))?;

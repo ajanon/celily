@@ -7,7 +7,7 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 
-use super::{BridgeGuard, BridgeSubnet, CreateBridgeParams, Device, InstanceConfig};
+use super::{BridgeGuard, BridgeSubnet, CreateBridgeParams, Device, ExecStdio, InstanceConfig};
 
 /// A mock [`super::InstanceBackend`] that records all calls for verification.
 pub struct MockInstanceBackend {
@@ -117,6 +117,7 @@ impl super::InstanceBackend for MockInstanceBackend {
         _gid: u32,
         _home: Option<&Path>,
         _proxy_url: Option<&str>,
+        _stdio: ExecStdio,
     ) -> Result<i32, Self::Error> {
         self.calls.lock().unwrap().push(MockInstanceCall::Exec {
             name: name.to_string(),

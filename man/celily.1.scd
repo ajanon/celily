@@ -161,6 +161,10 @@ The command's stdin, stdout and stderr are those of *celily*. Messages
 from *celily* itself go to stderr, so stdout carries only the command's
 output and can be piped. They are colored only when stderr is a terminal.
 
+_pre_run_ scripts share only stderr: their stdin is empty, their stdout
+goes to stderr too, and they never get a terminal (see
+*celily-config*(5)).
+
 # WORKTREE MODE
 
 When *--worktree* _NAME_ is passed, *celily* mounts the project directory

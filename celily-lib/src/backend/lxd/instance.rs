@@ -5,7 +5,7 @@ use std::path::Path;
 use async_trait::async_trait;
 
 use super::LxcBackend;
-use crate::backend::{Device, InstanceConfig};
+use crate::backend::{Device, ExecStdio, InstanceConfig};
 use crate::command::{AsyncCommandExt, CommandError, CommandExt};
 use crate::mount::AccessMode;
 
@@ -198,6 +198,7 @@ impl crate::backend::InstanceBackend for LxcBackend {
         gid: u32,
         home: Option<&Path>,
         proxy_url: Option<&str>,
+        stdio: ExecStdio,
     ) -> Result<i32, Self::Error> {
         let mut env_pairs: Vec<(&str, &OsStr)> = env
             .iter()
@@ -219,6 +220,12 @@ impl crate::backend::InstanceBackend for LxcBackend {
         let mut cmd = tokio::process::Command::from(
             self.exec_command(name, command, &env_pairs, cwd, uid, gid),
         );
+        if stdio == ExecStdio::Setup {
+            // No terminal either: lxc exec allocates one only when its stdin
+            // and stdout both are.
+            cmd.stdin(std::process::Stdio::null())
+                .stdout(std::io::stderr());
+        }
         let status = cmd.status().await?;
         let code = status.code().unwrap_or(1);
         Ok(code)
