@@ -275,6 +275,8 @@ impl crate::backend::InstanceBackend for LxcBackend {
                 &gid.to_string(),
             ])
             .stdin(std::process::Stdio::piped())
+            // lxc's progress output: celily's stdout is the command's.
+            .stdout(std::process::Stdio::null())
             .spawn()
             .map_err(CommandError::Io)?;
 
