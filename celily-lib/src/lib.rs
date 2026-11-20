@@ -13,6 +13,7 @@ pub use backend::{
     BridgeSubnet,
     CreateBridgeParams,
     Device,
+    ExecStdio,
     InstanceBackend,
     NetworkBackend,
     TcpAllow,

@@ -298,7 +298,8 @@ Notable fields (all at top level; no `[common]` / `[run]` nesting):
   for full schema.
 - `[worktree]` -- worktree mode configuration (user_name, user_email)
 - `pre_run` -- inline script run before the main command; one per fragment, all
-  of them run (in fragment order), first failure aborts
+  of them run (in fragment order), first failure aborts. stdin `/dev/null`,
+  stdout to stderr, no tty (see Standard streams)
 - `[[proxy]]` -- Unix socket proxy devices (host socket, listening in the
   instance); see `celily-config.5`
 
@@ -338,6 +339,17 @@ CLI flag to add or remove fragments: composition lives in `profiles.toml` only.
 
 If CLI args were given after `--`, they are used as-is. Otherwise falls back to
 a POSIX login shell (`sh -l`). The logic is inlined in `main.rs`.
+
+## Standard streams
+
+celily's stdout belongs to the command: a consumer may pipe it (e.g. JSONL from
+`pi --mode rpc`). Logs go to stderr (`with_writer(io::stderr)` in `main.rs`),
+internal `lxc` calls capture or discard their stdout, and setup steps run with
+`ExecStdio::Setup` (stdin `/dev/null`, stdout to celily's stderr, hence no tty:
+`lxc exec` allocates one only when stdin and stdout both are terminals). Only
+the command gets `ExecStdio::Inherit`; the worktree init script shares its exec,
+so it stays silent on stdout. Anything new that runs before the command, or
+prints from celily, must keep this.
 
 ## Environment variable priority
 

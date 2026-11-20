@@ -63,6 +63,19 @@ pub struct InstanceConfig {
     pub security_nesting: bool,
 }
 
+/// Where the standard streams of a command run by
+/// [`InstanceBackend::exec`] go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExecStdio {
+    /// The caller's stdin, stdout and stderr, terminal included: the
+    /// command the user asked for.
+    Inherit,
+    /// No stdin, stdout sent to the caller's stderr, never a terminal: a
+    /// setup step (e.g. `pre_run`), which must leave stdin and stdout to
+    /// the command.
+    Setup,
+}
+
 // ---------------------------------------------------------------------------
 // InstanceBackend
 // ---------------------------------------------------------------------------
@@ -114,6 +127,7 @@ pub trait InstanceBackend: Send + Sync {
         gid: u32,
         home: Option<&Path>,
         proxy_url: Option<&str>,
+        stdio: ExecStdio,
     ) -> Result<i32, Self::Error>;
 
     /// Execute a command inside the instance, capturing stdout.
