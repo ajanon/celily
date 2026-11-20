@@ -6,6 +6,7 @@ mod util;
 mod validate;
 
 use std::env;
+use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -25,13 +26,22 @@ use crate::util::bridge_name;
 /// Top-level application logic: load config, resolve context, build
 /// the isolated environment via the library, then run the command.
 async fn run() -> anyhow::Result<i32> {
-    tracing_subscriber::fmt()
+    // stdout belongs to the command: piped output (e.g. JSONL) must not
+    // carry celily's own messages.
+    let logs = tracing_subscriber::fmt()
+        .with_writer(io::stderr)
         .with_env_filter(
             tracing_subscriber::EnvFilter::builder()
                 .with_default_directive(LevelFilter::WARN.into())
                 .from_env_lossy(),
-        )
-        .init();
+        );
+    // Colors only on a terminal, where NO_COLOR still applies: no escape
+    // codes in a journal or a log file.
+    if io::stderr().is_terminal() {
+        logs.init();
+    } else {
+        logs.with_ansi(false).init();
+    }
 
     let args = Args::parse();
 

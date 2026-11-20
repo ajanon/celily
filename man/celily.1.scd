@@ -155,6 +155,12 @@ The project directory is mounted at the target configured via
 *--project-target* or _project_target_
 (default: *~/project*, relative to the container home).
 
+# STANDARD STREAMS
+
+The command's stdin, stdout and stderr are those of *celily*. Messages
+from *celily* itself go to stderr, so stdout carries only the command's
+output and can be piped. They are colored only when stderr is a terminal.
+
 # WORKTREE MODE
 
 When *--worktree* _NAME_ is passed, *celily* mounts the project directory
