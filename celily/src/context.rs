@@ -128,17 +128,6 @@ pub fn resolve_context(
 
     let project_target = expand_container_tilde(Path::new(&project_target_str), &container_home);
 
-    let raw_idmap = match kind {
-        InstanceKind::Vm => None,
-        InstanceKind::Container => {
-            let host_uid = nix::unistd::Uid::current().as_raw();
-            let host_gid = nix::unistd::Gid::current().as_raw();
-            Some(format!(
-                "uid {host_uid} {container_uid}\ngid {host_gid} {container_gid}"
-            ))
-        },
-    };
-
     // --- Worktree / read-only / mount-project resolution ---
     let worktree_enabled = args.worktree.is_some();
 
@@ -257,6 +246,22 @@ pub fn resolve_context(
         }
         mount.source = canonical;
     }
+
+    // Only a read-write bind mount needs the host user mapped: without it,
+    // the host user's files show up as nobody, and an escape from the
+    // container lands on an unmapped uid instead of the host user's.
+    // Volumes don't count: LXD shifts them to whatever map the container has.
+    let needs_idmap = mounts.iter().any(|m| m.access == AccessMode::ReadWrite);
+    let raw_idmap = match kind {
+        InstanceKind::Container if needs_idmap => {
+            let host_uid = nix::unistd::Uid::current().as_raw();
+            let host_gid = nix::unistd::Gid::current().as_raw();
+            Some(format!(
+                "uid {host_uid} {container_uid}\ngid {host_gid} {container_gid}"
+            ))
+        },
+        InstanceKind::Container | InstanceKind::Vm => None,
+    };
 
     let mut env_map: HashMap<String, String> = cfg.env.clone();
     for name in cfg.pass_env.iter().chain(args.cli_pass_env.iter()) {
@@ -431,6 +436,46 @@ mod tests {
         assert_eq!(access(&["--project-readwrite"], None), ReadWrite);
         assert_eq!(access(&["--no-project-readwrite"], Some(true)), ReadOnly);
         assert_eq!(access(&["-w", "foo"], Some(true)), ReadOnly);
+    }
+
+    /// raw.idmap only for a container with a read-write bind mount.
+    #[test]
+    fn raw_idmap_only_with_readwrite_mounts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path().canonicalize().unwrap();
+        let (project, config_dir) = (home.join("project"), home.join(".config"));
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(&config_dir).unwrap();
+        let idmap = |cli: &[&str], volume: bool| {
+            let args = Args::try_parse_from([&["celily"], cli].concat()).unwrap();
+            let volumes = if volume {
+                "[[volumes]]\nname = \"v\"\ntarget = \"/v\"\naccess = \"readwrite\"\n"
+            } else {
+                ""
+            };
+            let cfg: Config = toml::from_str(volumes).unwrap();
+            let ctx = resolve_context(
+                &args,
+                &cfg,
+                &project,
+                &home,
+                &home,
+                &config_dir,
+                std::slice::from_ref(&project),
+                &[],
+            )
+            .unwrap();
+            ctx.raw_idmap.is_some()
+        };
+        assert!(!idmap(&[], false));
+        assert!(!idmap(&["--mount-project"], false));
+        assert!(!idmap(&["-w", "foo"], false));
+        assert!(!idmap(&["--mount-project"], true));
+        assert!(idmap(&["--mount-project", "--project-readwrite"], false));
+        assert!(!idmap(
+            &["--vm", "--mount-project", "--project-readwrite"],
+            false
+        ));
     }
 
     /// Volumes become devices, read-only by default, targets expanded like

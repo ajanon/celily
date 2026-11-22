@@ -70,9 +70,10 @@ configuration (no LXD calls). Then `.init()?` creates the LXD instance
 the isolation bridge) and network isolation in parallel. Then `.start()?` boots,
 waits for systemd, pushes the CA cert, and rebuilds the trust store. Do not use
 `lxc launch` directly. `InstanceGuard::Drop` calls `lxc delete --force` (unless
-`--keep-instance`). The builder accepts `raw_idmap` for containers (not VMs) and
-warns on container-only limits applied to VMs. Drop order: `InstanceGuard` is
-dropped before `NetworkIsolation` -- guaranteed by `Instance<Running>`'s field
+`--keep-instance`). The builder accepts `raw_idmap` for containers (not VMs;
+`resolve_context` sets it only with a read-write bind mount) and warns on
+container-only limits applied to VMs. Drop order: `InstanceGuard` is dropped
+before `NetworkIsolation` -- guaranteed by `Instance<Running>`'s field
 declaration order.
 
 **Network isolation**: network isolation is mandatory -- every instance gets a
@@ -396,9 +397,12 @@ variant to the `Providers` enum.
 - `vm` serialized as `vm = true` in TOML (not `kind = "vm"`): `InstanceKind`
   deserializes from a bool via a custom `Deserialize` impl. The `--vm` CLI flag
   maps to the same behaviour.
-- `raw_idmap` always emits `uid {host_uid} {container_uid}` and
-  `gid {host_gid} {container_gid}` as two separate lines joined with `\n`. No
-  `both` line, no conditionals.
+- `raw_idmap` is set only when a bind mount is read-write: read-only mounts then
+  show up as owned by nobody, and an escape lands on an unmapped uid. Volumes
+  don't count (LXD shifts them to the container's map). `worktree-init.sh` sets
+  `safe.directory` for the project via `GIT_CONFIG_COUNT`. When set, it emits
+  `uid {host_uid} {container_uid}` and `gid {host_gid} {container_gid}` as two
+  separate lines joined with `\n`. No `both` line.
 - `bridge_name()` produces a max-15-char bridge name from the image prefix and
   UUID: `<prefix6>-<uuid8>`. Linux bridge names are capped at 15 characters.
 - `Instance<Running>` field order: `guard` (InstanceGuard) is declared before

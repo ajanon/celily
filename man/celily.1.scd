@@ -264,10 +264,21 @@ $ git config fetch.fsckObjects true
 
 # IDMAPS
 
-For containers (not VMs), *celily* configures _raw.idmap_ with
-_uid_ and _gid_ lines mapping the host user's uid and gid to the
-container uid and gid, so bind-mounted project files have the correct
-ownership.
+When a container (not a VM) has a read-write bind mount, the project
+included, *celily* configures _raw.idmap_ with _uid_ and _gid_ lines mapping
+the host user's uid and gid to the container uid and gid, so the sandbox
+writes there as the host user.
+
+Otherwise, the host user is not mapped: the files of read-only bind mounts
+show up as owned by _nobody_, files that are not world-readable cannot be
+read, and an escape from the container lands on an unmapped uid instead of
+the host user's. git refuses such a repository ("dubious ownership") unless
+it is listed in _safe.directory_; worktree mode lists the project and the
+repositories under it.
+
+Custom volumes are shifted by LXD to the container's map when attached. A
+volume used both with and without a read-write bind mount is shifted again at
+every switch, and cannot be attached to both at once.
 
 # MOUNT SECURITY
 
