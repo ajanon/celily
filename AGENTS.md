@@ -66,8 +66,14 @@ the trait first, then implement it for `LxcBackend`.
 
 **Instance lifecycle**: `Instance::prepare().....build()` assembles
 configuration (no LXD calls). Then `.init()?` creates the LXD instance
-(`lxc init --no-profiles --storage <pool>`: a profile could add a NIC outside
-the isolation bridge) and network isolation in parallel. Then `.start()?` boots,
+(`lxc init --no-profiles`: a profile could add a NIC outside the isolation
+bridge) with the full `api.InstancePut` JSON document piped on stdin
+(`backend/lxd/payload.rs`: description, config keys, and every device, root disk
+included, in a single create RPC). No `--storage`: the CLI overwrites a stdin
+root device when the flag is passed. This is the one setup call with piped
+stdin; every other setup step keeps stdin `/dev/null`. Network isolation is set
+up after the instance exists, then eth0 is attached with a separate
+`config device add` (it needs the bridge to exist). Then `.start()?` boots,
 waits for systemd, pushes the CA cert, and rebuilds the trust store. Do not use
 `lxc launch` directly. `InstanceGuard::Drop` calls `lxc delete --force` (unless
 `--keep-instance`). The builder accepts `raw_idmap` for containers (not VMs;

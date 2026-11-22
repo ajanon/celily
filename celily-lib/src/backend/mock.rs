@@ -7,7 +7,7 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 
-use super::{BridgeGuard, BridgeSubnet, CreateBridgeParams, Device, ExecStdio, InstanceConfig};
+use super::{BridgeGuard, BridgeSubnet, CreateBridgeParams, ExecStdio, InstanceConfig};
 
 /// A mock [`super::InstanceBackend`] that records all calls for verification.
 pub struct MockInstanceBackend {
@@ -27,9 +27,7 @@ pub enum MockInstanceCall {
     Create { name: String },
     Start { name: String },
     Delete { name: String },
-    AddDevice { name: String, dev_name: String },
     AttachToBridge { name: String, bridge: String },
-    SetDescription { name: String },
     Exec { name: String },
     ExecStdout { name: String },
     WriteFile { name: String, path: String },
@@ -64,22 +62,6 @@ impl super::InstanceBackend for MockInstanceBackend {
         Ok(())
     }
 
-    async fn add_device(
-        &self,
-        name: &str,
-        dev_name: &str,
-        _device: &Device,
-    ) -> Result<(), Self::Error> {
-        self.calls
-            .lock()
-            .unwrap()
-            .push(MockInstanceCall::AddDevice {
-                name: name.to_string(),
-                dev_name: dev_name.to_string(),
-            });
-        Ok(())
-    }
-
     async fn attach_to_bridge(
         &self,
         name: &str,
@@ -93,16 +75,6 @@ impl super::InstanceBackend for MockInstanceBackend {
             .push(MockInstanceCall::AttachToBridge {
                 name: name.to_string(),
                 bridge: bridge.to_string(),
-            });
-        Ok(())
-    }
-
-    async fn set_description(&self, name: &str, _desc: &str) -> Result<(), Self::Error> {
-        self.calls
-            .lock()
-            .unwrap()
-            .push(MockInstanceCall::SetDescription {
-                name: name.to_string(),
             });
         Ok(())
     }

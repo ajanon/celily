@@ -1,5 +1,7 @@
+use std::process::Stdio;
 use std::time::Instant;
 
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command as TokioCommand;
 use tracing::trace;
 
@@ -13,6 +15,10 @@ pub trait AsyncCommandExt {
     async fn run(&mut self) -> Result<(), CommandError>;
     async fn run_stdout(&mut self) -> Result<String, CommandError>;
     async fn run_output(&mut self) -> Result<std::process::Output, CommandError>;
+    /// Run, piping `input` to the command's stdin. Stdout is discarded:
+    /// celily's stdout belongs to the command. A non-zero exit is reported
+    /// over the broken pipe it may have caused.
+    async fn run_with_stdin(&mut self, input: &[u8]) -> Result<(), CommandError>;
 }
 
 impl AsyncCommandExt for TokioCommand {
@@ -59,6 +65,31 @@ impl AsyncCommandExt for TokioCommand {
             });
         }
         Ok(output)
+    }
+
+    async fn run_with_stdin(&mut self, input: &[u8]) -> Result<(), CommandError> {
+        let argv = super::argv_string(self.as_std());
+        let t = Instant::now();
+        self.stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped());
+        let mut child = self.spawn().map_err(CommandError::Io)?;
+        let mut stdin = child.stdin.take().expect("stdin is piped");
+        // Write while waiting: a child filling its stderr pipe before
+        // reading stdin would otherwise deadlock. Dropping stdin sends EOF.
+        let write = async move { stdin.write_all(input).await };
+        let (write_result, output) = tokio::join!(write, child.wait_with_output());
+        let output = output.map_err(CommandError::Io)?;
+        trace!("{} ({:.2?})", argv.trim(), t.elapsed());
+        if !output.status.success() {
+            return Err(CommandError::NonZero {
+                argv,
+                code: output.status.code(),
+                stderr: extract_stderr(&output),
+            });
+        }
+        write_result.map_err(CommandError::Io)?;
+        Ok(())
     }
 }
 
@@ -193,5 +224,54 @@ mod tests {
         };
         assert_eq!(code, Some(4));
         assert_eq!(stderr.as_deref(), Some("fail"));
+    }
+
+    // ---- AsyncCommandExt::run_with_stdin ----
+
+    #[tokio::test]
+    async fn run_with_stdin_feeds_the_child() {
+        let mut cmd = Command::new("grep");
+        cmd.arg("-q").arg("hello");
+        cmd.run_with_stdin(b"nope\nhello there\n")
+            .await
+            .expect("grep -q hello should find its stdin");
+    }
+
+    #[tokio::test]
+    async fn run_with_stdin_does_not_deadlock_on_stderr() {
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "head -c 262144 /dev/zero >&2; cat >/dev/null"]);
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            cmd.run_with_stdin(&vec![b'x'; 256 * 1024]),
+        )
+        .await
+        .expect("no deadlock")
+        .expect("child succeeds");
+    }
+
+    #[tokio::test]
+    async fn run_with_stdin_failure_captures_stderr() {
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "read line; echo \"got: $line\" >&2; exit 3"]);
+        let err = cmd.run_with_stdin(b"payload\n").await.unwrap_err();
+        let CommandError::NonZero { code, stderr, .. } = err else {
+            panic!("expected CommandError::NonZero, got {err:?}");
+        };
+        assert_eq!(code, Some(3));
+        assert_eq!(stderr.as_deref(), Some("got: payload"));
+    }
+
+    #[tokio::test]
+    async fn run_with_stdin_child_failure_wins_over_broken_pipe() {
+        // More than a pipe buffer, never read: the write breaks.
+        let big = vec![b'x'; 256 * 1024];
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "exit 4"]);
+        let err = cmd.run_with_stdin(&big).await.unwrap_err();
+        let CommandError::NonZero { code, .. } = err else {
+            panic!("expected CommandError::NonZero, got {err:?}");
+        };
+        assert_eq!(code, Some(4));
     }
 }

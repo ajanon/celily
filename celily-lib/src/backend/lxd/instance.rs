@@ -1,27 +1,103 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
 use async_trait::async_trait;
 
-use super::LxcBackend;
+use super::{LxcBackend, payload};
 use crate::backend::{Device, ExecStdio, InstanceConfig};
 use crate::command::{AsyncCommandExt, CommandError, CommandExt};
 use crate::mount::AccessMode;
 
 impl LxcBackend {
-    /// What `lxc config device add <instance> <device>` takes for `device`:
-    /// its type, then its properties.
-    fn device_args(&self, device: &Device) -> Vec<String> {
-        let mut args = match device {
+    /// The `api.InstancePut` projection of an [`InstanceConfig`]:
+    /// everything `lxc init` takes through stdin -- description, config
+    /// keys, and all devices including the root disk.
+    ///
+    /// The root disk rides in the payload, so `create` passes no
+    /// `--storage`: the CLIs overwrite a stdin root device when the flag
+    /// is given, and it triggers an extra `GetStoragePool` RPC on top.
+    fn instance_put(&self, config: &InstanceConfig) -> payload::InstancePut {
+        let mut config_map: BTreeMap<String, String> = BTreeMap::new();
+        if config.vm && !config.secure_boot {
+            config_map.insert("boot.mode".into(), "uefi-nosecureboot".into());
+        }
+        if let Some(n) = config.cpu {
+            config_map.insert("limits.cpu".into(), n.to_string());
+        }
+        if let Some(ref m) = config.memory {
+            config_map.insert("limits.memory".into(), m.clone());
+        }
+        if let Some(p) = config.processes {
+            if config.vm {
+                tracing::warn!("limits.processes is ignored on VMs");
+            } else {
+                config_map.insert("limits.processes".into(), p.to_string());
+            }
+        }
+        if let Some(prio) = config.disk_priority {
+            if config.vm {
+                tracing::warn!("limits.disk.priority is ignored on VMs");
+            } else {
+                config_map.insert("limits.disk.priority".into(), prio.to_string());
+            }
+        }
+        if let Some(ref mode) = config.memory_enforce {
+            if config.vm {
+                tracing::warn!("limits.memory.enforce is ignored on VMs");
+            } else {
+                config_map.insert("limits.memory.enforce".into(), mode.clone());
+            }
+        }
+        if let Some(ref idmap) = config.raw_idmap {
+            config_map.insert("raw.idmap".into(), idmap.clone());
+        }
+        if config.security_nesting {
+            if config.vm {
+                tracing::warn!("security.nesting is ignored on VMs");
+            } else {
+                config_map.insert("security.nesting".into(), "true".into());
+            }
+        }
+        config_map.insert("security.devlxd".into(), "false".into());
+
+        let mut root: BTreeMap<String, String> = BTreeMap::new();
+        root.insert("type".into(), "disk".into());
+        root.insert("pool".into(), self.pool.clone());
+        root.insert("path".into(), "/".into());
+        if let Some(ref size) = config.disk_size {
+            root.insert("size".into(), size.clone());
+        }
+
+        let mut devices: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+        devices.insert("root".into(), root);
+        for (dev_name, device) in &config.devices {
+            devices.insert(dev_name.clone(), self.device_map(device));
+        }
+
+        payload::InstancePut {
+            description: config.description.clone(),
+            config: config_map,
+            devices,
+        }
+    }
+
+    /// The `map[string]string` form of a device.
+    fn device_map(&self, device: &Device) -> BTreeMap<String, String> {
+        let mut map: BTreeMap<String, String> = match device {
             Device::Disk { source, .. } => {
-                vec!["disk".into(), format!("source={}", source.display())]
+                let mut map = BTreeMap::new();
+                map.insert("type".into(), "disk".into());
+                map.insert("source".into(), source.display().to_string());
+                map
             },
-            Device::Volume { name, .. } => vec![
-                "disk".into(),
-                format!("pool={}", self.pool),
-                format!("source={name}"),
-            ],
+            Device::Volume { name, .. } => {
+                let mut map = BTreeMap::new();
+                map.insert("type".into(), "disk".into());
+                map.insert("pool".into(), self.pool.clone());
+                map.insert("source".into(), name.clone());
+                map
+            },
             Device::Proxy {
                 connect,
                 listen,
@@ -30,26 +106,28 @@ impl LxcBackend {
                 host_uid,
                 host_gid,
                 mode,
-            } => vec![
-                "proxy".into(),
-                "bind=instance".into(),
-                format!("connect={connect}"),
-                format!("listen={listen}"),
-                format!("mode={mode}"),
-                format!("uid={uid}"),
-                format!("gid={gid}"),
-                format!("security.uid={host_uid}"),
-                format!("security.gid={host_gid}"),
-            ],
+            } => {
+                let mut map = BTreeMap::new();
+                map.insert("type".into(), "proxy".into());
+                map.insert("bind".into(), "instance".into());
+                map.insert("connect".into(), connect.clone());
+                map.insert("listen".into(), listen.clone());
+                map.insert("mode".into(), mode.clone());
+                map.insert("uid".into(), uid.to_string());
+                map.insert("gid".into(), gid.to_string());
+                map.insert("security.uid".into(), host_uid.to_string());
+                map.insert("security.gid".into(), host_gid.to_string());
+                map
+            },
         };
         if let Device::Disk { target, access, .. } | Device::Volume { target, access, .. } = device
         {
-            args.push(format!("path={}", target.display()));
+            map.insert("path".into(), target.display().to_string());
             if *access == AccessMode::ReadOnly {
-                args.push("readonly=true".into());
+                map.insert("readonly".into(), "true".into());
             }
         }
-        args
+        map
     }
 }
 
@@ -65,60 +143,20 @@ impl crate::backend::InstanceBackend for LxcBackend {
 
         // No profile: the daemon's default profile could add a NIC that
         // bypasses the isolation bridge, disks, or raw.lxc. Every device
-        // is celily's own: the root disk here, the rest added after init.
-        cmd.args(["--no-profiles", "--storage", &self.pool]);
-        if let Some(ref size) = config.disk_size {
-            cmd.args(["--device", &format!("root,size={size}")]);
-        }
+        // is celily's own, and they all arrive through the stdin payload.
+        cmd.arg("--no-profiles");
         if config.ephemeral {
             cmd.arg("--ephemeral");
         }
         if config.vm {
             cmd.arg("--vm");
-            if !config.secure_boot {
-                cmd.args(["--config", "boot.mode=uefi-nosecureboot"]);
-            }
-        }
-        if let Some(n) = config.cpu {
-            cmd.args(["--config", &format!("limits.cpu={n}")]);
-        }
-        if let Some(ref m) = config.memory {
-            cmd.args(["--config", &format!("limits.memory={m}")]);
-        }
-        if let Some(p) = config.processes {
-            if config.vm {
-                tracing::warn!("limits.processes is ignored on VMs");
-            } else {
-                cmd.args(["--config", &format!("limits.processes={p}")]);
-            }
-        }
-        if let Some(prio) = config.disk_priority {
-            if config.vm {
-                tracing::warn!("limits.disk.priority is ignored on VMs");
-            } else {
-                cmd.args(["--config", &format!("limits.disk.priority={prio}")]);
-            }
-        }
-        if let Some(ref mode) = config.memory_enforce {
-            if config.vm {
-                tracing::warn!("limits.memory.enforce is ignored on VMs");
-            } else {
-                cmd.args(["--config", &format!("limits.memory.enforce={mode}")]);
-            }
-        }
-        if let Some(ref idmap) = config.raw_idmap {
-            cmd.args(["--config", &format!("raw.idmap={idmap}")]);
-        }
-        if config.security_nesting {
-            if config.vm {
-                tracing::warn!("security.nesting is ignored on VMs");
-            } else {
-                cmd.args(["--config", "security.nesting=true"]);
-            }
         }
 
-        cmd.args(["--config", "security.devlxd=false"]);
-        cmd.run().await?;
+        let payload = self.instance_put(config);
+        let json = serde_json::to_string(&payload).expect("serializing InstancePut cannot fail");
+        tracing::trace!(instance = name, "lxc init payload: {json}");
+
+        cmd.run_with_stdin(json.as_bytes()).await?;
 
         Ok(())
     }
@@ -134,19 +172,6 @@ impl crate::backend::InstanceBackend for LxcBackend {
         self.lxc_project_command()
             .args(["delete", "--force", name])
             .run()
-    }
-
-    async fn add_device(
-        &self,
-        name: &str,
-        dev_name: &str,
-        device: &Device,
-    ) -> Result<(), Self::Error> {
-        self.lxc_project_command_async()
-            .args(["config", "device", "add", name, dev_name])
-            .args(self.device_args(device))
-            .run()
-            .await
     }
 
     async fn attach_to_bridge(
@@ -173,19 +198,6 @@ impl crate::backend::InstanceBackend for LxcBackend {
             args.push(format!("limits.egress={egress}"));
         }
         self.lxc_project_command_async().args(&args).run().await
-    }
-
-    async fn set_description(&self, name: &str, desc: &str) -> Result<(), Self::Error> {
-        self.lxc_project_command_async()
-            .args([
-                "config",
-                "set",
-                name,
-                "--property",
-                &format!("description={desc}"),
-            ])
-            .run()
-            .await
     }
 
     async fn exec(
@@ -395,15 +407,73 @@ mod tests {
             access,
         };
         let rw = [
-            "disk",
-            "pool=zfs",
-            "source=pi-sessions",
-            "path=/home/dev/.pi/agent/sessions",
+            ("path", "/home/dev/.pi/agent/sessions"),
+            ("pool", "zfs"),
+            ("source", "pi-sessions"),
+            ("type", "disk"),
         ];
-        assert_eq!(backend.device_args(&volume(AccessMode::ReadWrite)), rw);
+        let as_map = |pairs: &[(&str, &str)]| {
+            pairs
+                .iter()
+                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+                .collect::<BTreeMap<_, _>>()
+        };
         assert_eq!(
-            backend.device_args(&volume(AccessMode::ReadOnly)),
-            [&rw[..], &["readonly=true"]].concat(),
+            backend.device_map(&volume(AccessMode::ReadWrite)),
+            as_map(&rw)
         );
+        assert_eq!(
+            backend.device_map(&volume(AccessMode::ReadOnly)),
+            as_map(&[&rw[..], &[("readonly", "true")]].concat()),
+        );
+    }
+
+    #[test]
+    fn instance_put_bundles_root_config_and_devices() {
+        let backend = LxcBackend::lxd();
+        let config = InstanceConfig {
+            image: "celily".into(),
+            ephemeral: true,
+            vm: false,
+            secure_boot: true,
+            cpu: Some(2),
+            memory: Some("4GiB".into()),
+            disk_size: Some("10GiB".into()),
+            processes: Some(1024),
+            disk_priority: Some(5),
+            memory_enforce: Some("hard".into()),
+            raw_idmap: Some("uid 1000 1000".into()),
+            security_nesting: true,
+            devices: vec![(
+                "mount0".into(),
+                Device::Disk {
+                    source: "/tmp/src".into(),
+                    target: "/home/dev/src".into(),
+                    access: AccessMode::ReadOnly,
+                },
+            )],
+            description: "celily run".into(),
+        };
+        let put = backend.instance_put(&config);
+
+        assert_eq!(put.description, "celily run");
+        assert_eq!(
+            put.config.get("raw.idmap").map(String::as_str),
+            Some("uid 1000 1000")
+        );
+        assert_eq!(
+            put.config.get("security.devlxd").map(String::as_str),
+            Some("false")
+        );
+        assert_eq!(put.config.get("boot.mode"), None, "secure_boot stays on");
+        assert_eq!(
+            put.devices
+                .get("root")
+                .map(|root| root.get("size").map(String::as_str)),
+            Some(Some("10GiB"))
+        );
+        let mount0 = put.devices.get("mount0").unwrap();
+        assert_eq!(mount0.get("readonly").map(String::as_str), Some("true"));
+        assert_eq!(mount0.get("source").map(String::as_str), Some("/tmp/src"));
     }
 }

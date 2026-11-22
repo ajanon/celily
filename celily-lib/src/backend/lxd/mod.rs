@@ -2,6 +2,7 @@ mod acl;
 mod bridge;
 pub mod instance;
 pub mod network;
+mod payload;
 
 use crate::command::{AsyncCommandExt, CommandError};
 

@@ -19,9 +19,8 @@ pub struct QuotaConfig {
 ///
 /// Secrets are resolved from `rbw` at startup and routed to the proxy
 /// only - they never appear as environment variables in the container.
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AuthConfig {
     /// Name of an `rbw` item to resolve.
     pub secret: String,
@@ -31,7 +30,7 @@ pub struct AuthConfig {
 
     /// Optional prefix prepended to the resolved secret value.
     /// For `Authorization: Bearer <key>`, set `prefix = "Bearer "`.
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[serde(default)]
     pub prefix: Option<String>,
 }
 
