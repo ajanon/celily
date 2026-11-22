@@ -19,12 +19,24 @@ worktree_path="${HOME}/${CELILY_WORKTREE_NAME}"
 project="${CELILY_WORKTREE_PROJECT}"
 branch="${CELILY_WORKTREE_BRANCH}"
 
-if git -C "${project}" show-ref --verify --quiet "refs/heads/${branch}"; then
-    git clone --quiet --shared --branch "${branch}" "${project}" "${worktree_path}"
-else
-    git clone --quiet --shared "${project}" "${worktree_path}"
-    git -C "${worktree_path}" switch --quiet --create "${branch}"
-fi
+# show-ref exits 1 when the branch is missing. Any other failure (e.g.
+# "dubious ownership") is an error: branching off HEAD instead would silently
+# drop the existing branch.
+status=0
+git -C "${project}" show-ref --verify --quiet "refs/heads/${branch}" || status=$?
+case "${status}" in
+    0)
+        git clone --quiet --shared --branch "${branch}" "${project}" "${worktree_path}"
+        ;;
+    1)
+        git clone --quiet --shared "${project}" "${worktree_path}"
+        git -C "${worktree_path}" switch --quiet --create "${branch}"
+        ;;
+    *)
+        printf 'worktree-init: cannot look up branch %s in %s\n' "${branch}" "${project}" >&2
+        exit "${status}"
+        ;;
+esac
 
 cd "${worktree_path}"
 exec "$@"
