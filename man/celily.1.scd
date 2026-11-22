@@ -177,7 +177,10 @@ is copied. New commits stay in the clone until you fetch them (see
 The branch is *celily/*_NAME_. If it exists in the host repository, the
 clone starts from it; otherwise it is created from the host checkout's
 HEAD.
-Inside the sandbox, *git fetch origin* picks up new host commits.
+Inside the sandbox, *git fetch origin* picks up new host commits. git
+commands work in the project, and in the repositories under it, without
+raw.idmap (see *IDMAPS*): worktree mode sets _safe.directory_ for them in the
+environment (*GIT_CONFIG_COUNT*).
 
 The commit author and committer are taken from _[worktree].user_name_
 and _user_email_, falling back to the host project's git

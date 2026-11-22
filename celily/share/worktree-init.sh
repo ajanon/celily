@@ -19,6 +19,17 @@ worktree_path="${HOME}/${CELILY_WORKTREE_NAME}"
 project="${CELILY_WORKTREE_PROJECT}"
 branch="${CELILY_WORKTREE_BRANCH}"
 
+# Without raw.idmap (no read-write host mount), the project belongs to an
+# unmapped uid and git refuses it as "dubious ownership". Trust it, and the
+# repositories under it, for this script and the command: appended to any
+# GIT_CONFIG_COUNT entries already set, no file written.
+n="${GIT_CONFIG_COUNT:-0}"
+for dir in "${project}" "${project}/*"; do
+    export "GIT_CONFIG_KEY_${n}=safe.directory" "GIT_CONFIG_VALUE_${n}=${dir}"
+    n=$((n + 1))
+done
+export GIT_CONFIG_COUNT="${n}"
+
 # show-ref exits 1 when the branch is missing. Any other failure (e.g.
 # "dubious ownership") is an error: branching off HEAD instead would silently
 # drop the existing branch.
