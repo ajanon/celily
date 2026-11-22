@@ -40,9 +40,8 @@ pub trait SecretProvider: Send + Sync {
 /// Parsed from the `secret_provider` config key. Call
 /// [`resolve`](Self::resolve) to obtain a [`SecretProvider`] trait
 /// object.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Providers {
     /// [Bitwarden](https://bitwarden.com/) via the `rbw` CLI.
     Rbw,

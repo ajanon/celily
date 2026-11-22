@@ -15,7 +15,7 @@ pub mod mock;
 // ---------------------------------------------------------------------------
 
 /// A device to attach to an instance.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Device {
     /// Bind-mount a host directory or file into the instance.
     Disk {
@@ -61,6 +61,9 @@ pub struct InstanceConfig {
     pub memory_enforce: Option<String>,
     pub raw_idmap: Option<String>,
     pub security_nesting: bool,
+    /// Devices by name. The backend adds the root disk itself.
+    pub devices: Vec<(String, Device)>,
+    pub description: String,
 }
 
 /// Where the standard streams of a command run by
@@ -96,14 +99,6 @@ pub trait InstanceBackend: Send + Sync {
     /// Synchronous because it is called from Drop.
     fn delete(&self, name: &str) -> Result<(), Self::Error>;
 
-    /// Attach a device to the instance.
-    async fn add_device(
-        &self,
-        name: &str,
-        dev_name: &str,
-        device: &Device,
-    ) -> Result<(), Self::Error>;
-
     /// Override the default NIC to connect to the given bridge.
     async fn attach_to_bridge(
         &self,
@@ -112,9 +107,6 @@ pub trait InstanceBackend: Send + Sync {
         ingress: Option<&str>,
         egress: Option<&str>,
     ) -> Result<(), Self::Error>;
-
-    /// Set the instance description.
-    async fn set_description(&self, name: &str, desc: &str) -> Result<(), Self::Error>;
 
     /// Execute a command inside the instance, returning the exit code.
     async fn exec(
