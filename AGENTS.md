@@ -94,9 +94,9 @@ gateway is a host address other containers and LAN peers may route to. TCP rules
 proxy entirely. The CA is generated per instance in a 0700 directory under
 `$XDG_RUNTIME_DIR`, removed when `ProxelarGuard` drops. The CA cert is pushed
 into the instance once systemd is up (`lxc file push`, then a trust store
-rebuild), and `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` are injected into `lxc exec`
-*after* user-specified env vars so config cannot override them by mistake (the
-sandbox can always drop them: the bridge ACL is the boundary).
+rebuild), and `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` (both cases) are injected
+into `lxc exec` *after* user-specified env vars so config cannot override them
+by mistake (the sandbox can always drop them: the bridge ACL is the boundary).
 `Instance<Running>` holds both `InstanceGuard` and `NetworkIsolation` with field
 declaration order guaranteeing the instance is deleted before the bridge is torn
 down.
@@ -365,11 +365,12 @@ Lowest to highest: `env` -> `pass_env` -> `--pass-env` -> `--env`.
 Forwarded vars (`pass_env` / `--pass-env`) override static `env` entries with
 the same key. CLI `--env` is the highest priority.
 
-**Proxy env vars** (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`) are injected at the
-highest priority -- they override `--env`, `--pass-env`, and `env`/`pass_env`
-entries with the same key. This is a convenience, not a security property: any
-process can drop them. The bridge ACL, which only lets TCP reach the proxy and
-TCP rules, is what keeps traffic on the proxy.
+**Proxy env vars** (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, and their lowercase
+forms: curl reads only `http_proxy`) are injected at the highest priority --
+they override `--env`, `--pass-env`, and `env`/`pass_env` entries with the same
+key. This is a convenience, not a security property: any process can drop them.
+The bridge ACL, which only lets TCP reach the proxy and TCP rules, is what keeps
+traffic on the proxy.
 
 ## Secrets handling
 

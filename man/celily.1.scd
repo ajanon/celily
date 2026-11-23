@@ -350,11 +350,12 @@ and injects authentication headers where configured (see _auth_ in
 *celily-config*(5)). The proxy listens on the host's address on the
 bridge, and only serves the instance: requests from anywhere else, other
 containers included, get a 403.
-*HTTP_PROXY*, *HTTPS_PROXY*, *NODE_USE_ENV_PROXY* and *NODE_USE_SYSTEM_CA*
-are forcibly injected so that proxy-aware tools work transparently. They
-are a convenience, not the boundary: a process can drop them. Tools that
-ignore them reach nothing -- the bridge ACL rejects every TCP connection
-but those to the proxy and to TCP rules.
+*HTTP_PROXY*, *HTTPS_PROXY* (and their lowercase forms),
+*NODE_USE_ENV_PROXY* and *NODE_USE_SYSTEM_CA* are forcibly injected so
+that proxy-aware tools work transparently. They are a convenience, not
+the boundary: a process can drop them. Tools that ignore them reach
+nothing -- the bridge ACL rejects every TCP connection but those to the
+proxy and to TCP rules.
 
 Instances are created without any LXD/Incus profile: a profile could
 add a network interface outside the isolation bridge, extra devices, or

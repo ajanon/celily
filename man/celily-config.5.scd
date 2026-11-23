@@ -507,11 +507,12 @@ running inside the *celily* process, that enforce the allowlist.
 	through the bridge's dnsmasq, as its DNS resolver. Allowed DNS
 	queries are resolved by the first nameserver of the host's
 	_/etc/resolv.conf_.
-- *HTTP_PROXY*, *HTTPS_PROXY*, *NO_PROXY*, *NODE_USE_ENV_PROXY* and
-	*NODE_USE_SYSTEM_CA* environment variables are forcibly injected
-	into the container at the highest priority -- they cannot be
-	overridden by *--env* or config. They are a convenience, not the
-	boundary: a process can drop them, and the ACL still applies.
+- *HTTP_PROXY*, *HTTPS_PROXY*, *NO_PROXY* (and their lowercase forms,
+	which curl reads), *NODE_USE_ENV_PROXY* and *NODE_USE_SYSTEM_CA*
+	environment variables are forcibly injected into the container at
+	the highest priority -- they cannot be overridden by *--env* or
+	config. They are a convenience, not the boundary: a process can drop
+	them, and the ACL still applies.
 - A per-instance CA certificate is pushed into the container so
 	TLS-terminated connections through the proxy are trusted.
 
