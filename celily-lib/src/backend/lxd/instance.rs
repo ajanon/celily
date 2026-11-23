@@ -221,10 +221,15 @@ impl crate::backend::InstanceBackend for LxcBackend {
             env_pairs.push(("HOME", h.as_os_str()));
         }
         if let Some(proxy) = proxy_url {
+            // Both cases: curl reads only the lowercase http_proxy, and
+            // prefers the lowercase form of the others.
             env_pairs.extend([
                 ("HTTP_PROXY", OsStr::new(proxy)),
                 ("HTTPS_PROXY", OsStr::new(proxy)),
                 ("NO_PROXY", OsStr::new("")),
+                ("http_proxy", OsStr::new(proxy)),
+                ("https_proxy", OsStr::new(proxy)),
+                ("no_proxy", OsStr::new("")),
                 ("NODE_USE_ENV_PROXY", OsStr::new("1")),
                 ("NODE_USE_SYSTEM_CA", OsStr::new("1")),
             ]);
