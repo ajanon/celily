@@ -20,7 +20,8 @@ impl LxcBackend {
     fn instance_put(&self, config: &InstanceConfig) -> payload::InstancePut {
         let mut config_map: BTreeMap<String, String> = BTreeMap::new();
         if config.vm && !config.secure_boot {
-            config_map.insert("boot.mode".into(), "uefi-nosecureboot".into());
+            let (key, value) = self.daemon.no_secure_boot();
+            config_map.insert(key.into(), value.into());
         }
         if let Some(n) = config.cpu {
             config_map.insert("limits.cpu".into(), n.to_string());
@@ -59,7 +60,7 @@ impl LxcBackend {
                 config_map.insert("security.nesting".into(), "true".into());
             }
         }
-        config_map.insert("security.devlxd".into(), "false".into());
+        config_map.insert(self.daemon.guest_api_key().into(), "false".into());
 
         let mut root: BTreeMap<String, String> = BTreeMap::new();
         root.insert("type".into(), "disk".into());
@@ -315,7 +316,7 @@ impl crate::backend::InstanceBackend for LxcBackend {
         let status = child.wait().await.map_err(CommandError::Io)?;
         if !status.success() {
             return Err(CommandError::NonZero {
-                argv: format!("{} file push ... {dest}", self.binary),
+                argv: format!("{} file push ... {dest}", self.daemon.binary()),
                 code: status.code(),
                 stderr: None,
             });
@@ -475,5 +476,42 @@ mod tests {
         let mount0 = put.devices.get("mount0").unwrap();
         assert_eq!(mount0.get("readonly").map(String::as_str), Some("true"));
         assert_eq!(mount0.get("source").map(String::as_str), Some("/tmp/src"));
+    }
+
+    #[test]
+    fn instance_put_uses_the_daemon_key_names() {
+        let vm = InstanceConfig {
+            vm: true,
+            secure_boot: false,
+            ..InstanceConfig::default()
+        };
+        let config = |backend: LxcBackend| {
+            backend
+                .instance_put(&vm)
+                .config
+                .into_iter()
+                .collect::<Vec<_>>()
+        };
+        let pairs = |pairs: &[(&str, &str)]| {
+            pairs
+                .iter()
+                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(
+            config(LxcBackend::lxd()),
+            pairs(&[
+                ("boot.mode", "uefi-nosecureboot"),
+                ("security.devlxd", "false"),
+            ]),
+        );
+        assert_eq!(
+            config(LxcBackend::incus()),
+            pairs(&[
+                ("security.guestapi", "false"),
+                ("security.secureboot", "false"),
+            ]),
+        );
     }
 }
