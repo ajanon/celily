@@ -6,7 +6,7 @@ and backend; and the tests, run in them.
     driver.py test HOST --backend=B --celily=PATH [--junitxml=PATH]
                                           [-- PYTEST_ARGS...]
     driver.py down HOST --backend=B
-    driver.py image [OPTIONS]             guest images, with your own lxc
+    driver.py image [OPTIONS]             guest images, with your lxc or incus
 
 The binary under test comes from elsewhere: `python3 -m builder HOST`
 builds one for the host. CI runs the same commands
@@ -25,6 +25,7 @@ import hosts.arch
 import hosts.ubuntu
 import image_build
 import image_build.arch
+from backend.lxc import DAEMONS
 from command import Failed, run
 from hosts import HostBackend
 
@@ -76,32 +77,31 @@ class Vm:
 
 def up(args):
     vm = _vm(args)
+    daemon = vm.backend.daemon
     vm.limactl("start", "--plain", f"--name={vm.name}", f"template:{vm.host.template}")
     vm.host.upgrade(vm)
     vm.host.install_backend(vm, vm.backend)
     vm.host.install_uv(vm)
-    # From here, LXD's group, admin commands and CLI: every backend is an
-    # LXD so far. Incus has its own (incus-admin, incus admin, incus).
     user = vm.output(["id", "-un"]).strip()
-    # Missing on some hosts, maybe: harmless where it exists. LXD gives
-    # its socket to the group when it starts, after the reboot.
-    vm.run(["sudo", "groupadd", "--force", "--system", "lxd"])
-    vm.run(["sudo", "usermod", "--append", "--groups=lxd", user])
-    # The kernel an upgrade installed, and sessions in the lxd group (the
-    # ssh control master would keep the old groups).
+    # Missing on some hosts, maybe: harmless where it exists. The daemon
+    # gives its socket to the group when it starts, after the reboot.
+    vm.run(["sudo", "groupadd", "--force", "--system", daemon.group])
+    vm.run(["sudo", "usermod", "--append", f"--groups={daemon.group}", user])
+    # The kernel an upgrade installed, and sessions in the group (the ssh
+    # control master would keep the old groups).
     vm.limactl("restart", vm.name)
     groups = vm.output(["id", "-nG"]).split()
-    if "lxd" not in groups:
-        raise Failed(f"{user} is not in the lxd group after a reboot: {groups}")
-    vm.run(["sudo", "lxd", "waitready", "--timeout=120"])
-    vm.run(["sudo", "lxd", "init", "--auto"])
+    if daemon.group not in groups:
+        raise Failed(f"{user} not in {daemon.group} after a reboot: {groups}")
+    vm.run(["sudo", *daemon.admin, "waitready", "--timeout=120"])
+    vm.run(["sudo", *daemon.admin, "init", "--auto"])
     for guest in GUESTS.values():
         image_build.build(
             guest,
-            lxc=[*vm.shell(), "lxc"],
+            cli=[*vm.shell(), daemon.cli],
             project=PROJECT,
             pool="default",
-            network="lxdbr0",
+            network=daemon.network,
         )
 
 
@@ -116,6 +116,7 @@ def test(args):
         "run",
         "pytest",
         "--celily=celily",
+        f"--backend={vm.backend.daemon.kind}",
         "--basetemp=../it-tmp",
         "--junitxml=../it-junit.xml",
     ]
@@ -139,13 +140,14 @@ def down(args):
 
 
 def image(args):
+    daemon = DAEMONS[args.backend]
     for distro in args.guest or GUESTS:
         image_build.build(
             GUESTS[distro],
-            lxc=["lxc"],
-            project=args.lxd_project,
-            pool=args.lxd_pool,
-            network=args.network,
+            cli=[daemon.cli],
+            project=args.backend_project,
+            pool=args.backend_pool,
+            network=args.network or daemon.network,
         )
 
 
@@ -193,13 +195,17 @@ def main():
     )
     sub.add_argument("pytest_args", nargs="*", help="after --, passed to pytest")
 
-    sub = commands.add_parser("image", help="build guest images with your lxc")
+    sub = commands.add_parser("image", help="build guest images with your own CLI")
     sub.add_argument(
         "--guest", action="append", choices=GUESTS, help="repeatable (default: all)"
     )
-    sub.add_argument("--lxd-project", default=PROJECT)
-    sub.add_argument("--lxd-pool", default="default")
-    sub.add_argument("--network", default="lxdbr0")
+    sub.add_argument("--backend", choices=sorted(DAEMONS), default="lxd")
+    sub.add_argument("--backend-project", default=PROJECT)
+    sub.add_argument("--backend-pool", default="default")
+    sub.add_argument(
+        "--network",
+        help="the build instance's (default: the bridge `init --auto` creates)",
+    )
     sub.set_defaults(func=image)
 
     args = parser.parse_args()

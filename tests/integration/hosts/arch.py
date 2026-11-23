@@ -7,7 +7,7 @@ ROOT_SUBIDS = "1000000-1000999999"
 class Arch(Host):
     template = "archlinux"
     # No LXD_SNAP yet: snapd is in the AUR only (pin it when it comes).
-    backends = frozenset({HostBackend.LXD_DISTRO})
+    backends = frozenset({HostBackend.LXD_DISTRO, HostBackend.INCUS_DISTRO})
 
     def upgrade(self, vm):
         # The cloud image is older than the keyring, and than the glibc
@@ -18,9 +18,15 @@ class Arch(Host):
         vm.run(["sudo", "pacman", "-Su", "--noconfirm"])
 
     def install_backend(self, vm, backend):
-        assert backend == HostBackend.LXD_DISTRO, backend
-        vm.run(["sudo", "pacman", "-S", "--noconfirm", "--needed", "lxd"])
-        # Read by LXD when it starts.
+        match backend:
+            case HostBackend.LXD_DISTRO:
+                package = "lxd"
+            case HostBackend.INCUS_DISTRO:
+                package = "incus"
+            case _:
+                raise AssertionError(backend)
+        vm.run(["sudo", "pacman", "-S", "--noconfirm", "--needed", package])
+        # Read by the daemon when it starts.
         vm.run(
             [
                 "sudo",
@@ -30,8 +36,9 @@ class Arch(Host):
                 "root",
             ]
         )
-        # Not --now: the upgrade removed the running kernel's modules.
-        vm.run(["sudo", "systemctl", "enable", "lxd.service"])
+        # Its service has its name. Not --now: the upgrade removed the
+        # running kernel's modules.
+        vm.run(["sudo", "systemctl", "enable", f"{package}.service"])
 
     def install_uv(self, vm):
         vm.run(["sudo", "pacman", "-S", "--noconfirm", "--needed", "python", "uv"])
