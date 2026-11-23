@@ -1,0 +1,17 @@
+[project]
+name = "celily-integration-tests"
+version = "0"
+description = "Black-box tests of the celily binary against a real backend"
+requires-python = ">=3.12"
+dependencies = ["pytest", "pytest-timeout", "pytest-xdist", "tomli-w"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+addopts = ["--strict-config", "--strict-markers", "-ra"]
+xfail_strict = true
+junit_logging = "all"
+# Backstop only: every celily run has its own, shorter, timeout
+# (conftest.py), which also cleans up after it.
+timeout = 900

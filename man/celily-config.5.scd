@@ -167,10 +167,18 @@ own LXD/Incus image (built with *lxc publish*, a bash script, or any
 automation tool) and point _image_ at its alias or
 fingerprint.
 
+The image must boot with systemd, and reach the _running_ state of
+*systemctl is-system-running*: *celily* waits up to about 30 seconds
+for it before running anything in the instance. A failed unit leaves
+the system _degraded_, which is not ready either: *celily* then fails
+with a timeout. *systemctl --failed* lists those units; mask them
+(*systemctl mask*) when building the image, like _console-getty.service_
+in the *images:archlinux* container image.
+
 For network isolation to work, the image must include the
 distribution's CA certificate trust infrastructure so that
-*celily* can inject its per-instance MITM CA certificate before
-first boot.
+*celily* can inject its per-instance MITM CA certificate once the
+instance has booted.
 
 *Arch Linux*
 

@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+"""The VMs the integration tests run in, one per host (a Lima template)
+and backend; and the tests, run in them.
+
+    driver.py up HOST --backend=B         start it, backend and images in
+    driver.py test HOST --backend=B --celily=PATH [-- PYTEST_ARGS...]
+    driver.py down HOST --backend=B
+    driver.py image [OPTIONS]             guest images, with your own lxc
+
+The binary under test comes from elsewhere: `python3 -m builder HOST`
+builds one for the host. CI runs the same commands
+(.github/workflows/integration.yml). Standard library only, so far: CI
+runs it with the runner's python3, nothing installed.
+"""
+
+import argparse
+import shlex
+import subprocess
+import sys
+import tarfile
+from pathlib import Path
+
+import hosts.arch
+import hosts.ubuntu
+import image_build
+import image_build.arch
+from command import Failed, run
+from hosts import HostBackend
+
+HERE = Path(__file__).resolve().parent
+
+HOSTS = {
+    host.template: host for host in [hosts.arch.Arch(), hosts.ubuntu.Ubuntu("24.04")]
+}
+GUESTS = {guest.distro: guest for guest in [image_build.arch.Arch()]}
+PROJECT = "celily-it"
+
+
+class Vm:
+    def __init__(self, host, backend):
+        self.host = host
+        self.backend = backend
+        self.name = f"celily-it-{host.template}-{backend}"
+
+    def limactl(self, command, *args):
+        run(["limactl", "--tty=false", command, *args])
+
+    def shell(self, workdir="."):
+        """A prefix running a command in the VM, as its user, in a login
+        shell. A relative `workdir` is from the user's home."""
+        return ["limactl", "--tty=false", "shell", f"--workdir={workdir}", self.name]
+
+    def run(self, argv, *, workdir=".", **kwargs):
+        return run([*self.shell(workdir), *argv], **kwargs)
+
+    def output(self, argv):
+        return self.run(argv, capture=True).stdout
+
+    def extract(self, files, dest):
+        """Copy `files` ({name in dest: local path}) to `dest`, keeping
+        their modes. Streamed: the debug binary weighs hundreds of MB."""
+        argv = [*self.shell(), "tar", "--extract", f"--directory={dest}"]
+        print("+", shlex.join(argv), "< tar", file=sys.stderr, flush=True)
+        # Unbuffered: closing stdin flushes nothing into a broken pipe.
+        with subprocess.Popen(argv, stdin=subprocess.PIPE, bufsize=0) as proc:
+            try:
+                with tarfile.open(fileobj=proc.stdin, mode="w|") as tar:
+                    for name, path in files.items():
+                        tar.add(path, arcname=name)
+            except BrokenPipeError:
+                pass  # tar exited early: its status says why
+        if proc.returncode != 0:
+            raise Failed(f"exit {proc.returncode}: extracting into {self.name}:{dest}")
+
+
+def up(args):
+    vm = _vm(args)
+    vm.limactl("start", "--plain", f"--name={vm.name}", f"template:{vm.host.template}")
+    vm.host.upgrade(vm)
+    vm.host.install_backend(vm, vm.backend)
+    vm.host.install_uv(vm)
+    # From here, LXD's group, admin commands and CLI: every backend is an
+    # LXD so far. Incus has its own (incus-admin, incus admin, incus).
+    user = vm.output(["id", "-un"]).strip()
+    # Missing on some hosts, maybe: harmless where it exists. LXD gives
+    # its socket to the group when it starts, after the reboot.
+    vm.run(["sudo", "groupadd", "--force", "--system", "lxd"])
+    vm.run(["sudo", "usermod", "--append", "--groups=lxd", user])
+    # The kernel an upgrade installed, and sessions in the lxd group (the
+    # ssh control master would keep the old groups).
+    vm.limactl("restart", vm.name)
+    groups = vm.output(["id", "-nG"]).split()
+    if "lxd" not in groups:
+        raise Failed(f"{user} is not in the lxd group after a reboot: {groups}")
+    vm.run(["sudo", "lxd", "waitready", "--timeout=120"])
+    vm.run(["sudo", "lxd", "init", "--auto"])
+    for guest in GUESTS.values():
+        image_build.build(
+            guest,
+            lxc=[*vm.shell(), "lxc"],
+            project=PROJECT,
+            pool="default",
+            network="lxdbr0",
+        )
+
+
+def test(args):
+    vm = _vm(args)
+    vm.run(["rm", "-rf", "it", "it-tmp"])
+    vm.run(["mkdir", "it"])
+    vm.extract({**_tests(), "celily": args.celily}, "it")
+    # --basetemp: under HOME, no hidden component, for snap's lxc.
+    argv = ["uv", "run", "pytest", "--celily=celily", "--basetemp=../it-tmp"]
+    return vm.run([*argv, *args.pytest_args], workdir="it", check=False).returncode
+
+
+def down(args):
+    vm = _vm(args)
+    vm.limactl("delete", "--force", vm.name)
+
+
+def image(args):
+    for distro in args.guest or GUESTS:
+        image_build.build(
+            GUESTS[distro],
+            lxc=["lxc"],
+            project=args.lxd_project,
+            pool=args.lxd_pool,
+            network=args.network,
+        )
+
+
+def _vm(args):
+    host = HOSTS[args.host]
+    backend = HostBackend(args.backend)
+    if backend not in host.backends:
+        supported = ", ".join(sorted(host.backends))
+        raise Failed(f"no {backend} on {host.template} (supported: {supported})")
+    return Vm(host, backend)
+
+
+def _tests():
+    """This directory, without caches and virtual environments."""
+    files = {}
+    for root, dirs, names in HERE.walk():
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+        for name in names:
+            path = root / name
+            files[str(path.relative_to(HERE))] = path
+    return files
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    commands = parser.add_subparsers(required=True)
+
+    def vm_command(name, func, **kwargs):
+        sub = commands.add_parser(name, **kwargs)
+        sub.add_argument("host", choices=HOSTS)
+        sub.add_argument("--backend", choices=list(HostBackend), required=True)
+        sub.set_defaults(func=func)
+        return sub
+
+    vm_command("up", up)
+    vm_command("down", down)
+    sub = vm_command("test", test)
+    sub.add_argument("--celily", type=Path, required=True, help="the binary to test")
+    sub.add_argument("pytest_args", nargs="*", help="after --, passed to pytest")
+
+    sub = commands.add_parser("image", help="build guest images with your lxc")
+    sub.add_argument(
+        "--guest", action="append", choices=GUESTS, help="repeatable (default: all)"
+    )
+    sub.add_argument("--lxd-project", default=PROJECT)
+    sub.add_argument("--lxd-pool", default="default")
+    sub.add_argument("--network", default="lxdbr0")
+    sub.set_defaults(func=image)
+
+    args = parser.parse_args()
+    try:
+        return args.func(args) or 0
+    except Failed as err:
+        print(f"driver: {err}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
