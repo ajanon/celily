@@ -65,9 +65,11 @@ celily is built on two rules:
 ## Testing
 
 - Add unit tests for new code if possible.
-- Integration tests for the full container lifecycle are not yet in place. If
+- Integration tests live in `tests/integration/` (see its README): the celily
+  binary against a real LXD or Incus, run by CI. Coverage is thin so far: if
   your change touches the orchestration layer (`main.rs`, `context.rs`, the
-  type-state machine), test it manually against a real LXD/Incus instance.
+  type-state machine), add a test there, or test it manually against a real
+  LXD/Incus instance.
 
 ## Documentation
 
