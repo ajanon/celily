@@ -5,25 +5,21 @@ Plain HTTP only for now: the proxy trusts the web PKI only upstream, so
 an HTTPS server of our own would need a certificate it does not accept.
 """
 
+import shutil
+from pathlib import Path
+
 import pytest
 
 from servers import BODY
 
+STUBS = Path(__file__).parent / "stubs"
+
 # The proxy's answer to a request no rule allows.
 BLOCKED = "Blocked by network policy\n"
 
-# Fake, resolved by the fake rbw below.
+# The item stubs/rbw.sh knows, and its made-up secret: keep them in sync.
 SECRET_NAME = "foo"
 SECRET = "celily-it-secret-5c2e9a"
-
-FAKE_RBW = f"""#!/bin/sh
-# rbw, as celily runs it: `rbw unlocked`, then `rbw get ITEM`.
-case "$*" in
-unlocked) ;;
-"get {SECRET_NAME}") printf '%s\\n' '{SECRET}' ;;
-*) printf 'fake rbw: unexpected arguments: %s\\n' "$*" >&2; exit 1 ;;
-esac
-"""
 
 # CONNECT through the proxy, then send what is neither TLS nor HTTP (an
 # SSH banner). Prints the proxy's answer, then whatever comes back until
@@ -92,13 +88,11 @@ def test_listed_host_is_reached(celily, http_server):
 
 
 @pytest.fixture
-def fake_rbw(celily):
-    path = celily.bin / "rbw"
-    path.write_text(FAKE_RBW)
-    path.chmod(0o755)
+def rbw_stub(celily):
+    shutil.copy(STUBS / "rbw.sh", celily.bin / "rbw")
 
 
-def test_auth_secret_is_injected(celily, http_server, fake_rbw):
+def test_auth_secret_is_injected(celily, http_server, rbw_stub):
     auth = {"secret": SECRET_NAME, "header": "Authorization", "prefix": "Bearer "}
     celily.fragment = {
         "secret_provider": "rbw",

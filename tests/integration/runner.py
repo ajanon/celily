@@ -56,7 +56,7 @@ class Celily:
         self.home = root / "home"
         self.project = self.home / "project"
         self.config_dir = self.home / ".config" / "celily"
-        # First in celily's PATH: fakes of the host tools it runs (rbw).
+        # First in celily's PATH: stubs of the host tools it runs (rbw).
         self.bin = root / "bin"
         self.runtime_dir = runtime_dir
         # What the host and the cell provide.
