@@ -158,7 +158,8 @@ result of the previous ones, with the following rules:
 *secure_boot* = _bool_
 	Disable UEFI secure boot for VMs. Set to false when the image does not
 	support secure boot (e.g. Arch Linux cloud images). Ignored on
-	containers. Default: true (LXD/Incus default; leaves _boot.mode_ unchanged).
+	containers. Default: true. False sets _boot.mode_ (LXD) or
+	_security.secureboot_ (Incus); true leaves them to the daemon.
 
 # IMAGE REQUIREMENTS
 

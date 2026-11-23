@@ -9,14 +9,47 @@ use crate::command::{AsyncCommandExt, CommandError};
 /// LXC-family backend -- spawns the `lxc` or `incus` CLI for all operations.
 ///
 /// The [`lxd`](Self::lxd) and [`incus`](Self::incus) constructors select the
-/// binary. `remote` and `project` scope all invocations, `pool` holds the
+/// daemon. `remote` and `project` scope all invocations, `pool` holds the
 /// root disk.
 #[derive(Debug, Clone)]
 pub struct LxcBackend {
     pub remote: Option<String>,
     pub project: Option<String>,
     pub pool: String,
-    binary: &'static str,
+    daemon: Daemon,
+}
+
+/// The daemon behind the CLI: everything that differs between LXD and Incus.
+#[derive(Debug, Clone, Copy)]
+enum Daemon {
+    Lxd,
+    Incus,
+}
+
+impl Daemon {
+    fn binary(self) -> &'static str {
+        match self {
+            Self::Lxd => "lxc",
+            Self::Incus => "incus",
+        }
+    }
+
+    /// The instance key that hides the guest API (`/dev/lxd`,
+    /// `/dev/incus`). Incus renamed LXD's key and rejects the old name.
+    fn guest_api_key(self) -> &'static str {
+        match self {
+            Self::Lxd => "security.devlxd",
+            Self::Incus => "security.guestapi",
+        }
+    }
+
+    /// The instance config entry that turns UEFI secure boot off on VMs.
+    fn no_secure_boot(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Lxd => ("boot.mode", "uefi-nosecureboot"),
+            Self::Incus => ("security.secureboot", "false"),
+        }
+    }
 }
 
 impl LxcBackend {
@@ -26,7 +59,7 @@ impl LxcBackend {
             remote: None,
             project: None,
             pool: "default".into(),
-            binary: "lxc",
+            daemon: Daemon::Lxd,
         }
     }
 
@@ -36,7 +69,7 @@ impl LxcBackend {
             remote: None,
             project: None,
             pool: "default".into(),
-            binary: "incus",
+            daemon: Daemon::Incus,
         }
     }
 
@@ -84,7 +117,7 @@ impl LxcBackend {
     /// Used for network operations (bridge networks are unsupported
     /// in non-default LXD projects).
     pub(super) fn lxc_command(&self) -> std::process::Command {
-        let mut cmd = std::process::Command::new(self.binary);
+        let mut cmd = std::process::Command::new(self.daemon.binary());
         if let Some(ref remote) = self.remote {
             cmd.args(["--remote", remote]);
         }
@@ -94,7 +127,7 @@ impl LxcBackend {
     /// Build a command scoped to the configured project.
     /// Used for instance and profile operations.
     pub(super) fn lxc_project_command(&self) -> std::process::Command {
-        let mut cmd = std::process::Command::new(self.binary);
+        let mut cmd = std::process::Command::new(self.daemon.binary());
         if let Some(ref project) = self.project {
             cmd.args(["--project", project]);
         }
@@ -106,7 +139,7 @@ impl LxcBackend {
 
     /// Async variant of [`lxc_command`](Self::lxc_command).
     pub(super) fn lxc_command_async(&self) -> tokio::process::Command {
-        let mut cmd = tokio::process::Command::new(self.binary);
+        let mut cmd = tokio::process::Command::new(self.daemon.binary());
         if let Some(ref remote) = self.remote {
             cmd.args(["--remote", remote]);
         }
@@ -115,7 +148,7 @@ impl LxcBackend {
 
     /// Async variant of [`lxc_project_command`](Self::lxc_project_command).
     pub(super) fn lxc_project_command_async(&self) -> tokio::process::Command {
-        let mut cmd = tokio::process::Command::new(self.binary);
+        let mut cmd = tokio::process::Command::new(self.daemon.binary());
         if let Some(ref project) = self.project {
             cmd.args(["--project", project]);
         }
