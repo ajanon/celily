@@ -95,8 +95,8 @@ config, and runs celily from there the way a user does:
   logging all three fails too.
 - celily's log goes to the captured output: it shows when a test fails, and in
   the junit report.
-- `celily.bin`: first in celily's `PATH`, for fakes of the host tools it runs
-  (`test_network.py` puts an `rbw` there).
+- `celily.bin`: first in celily's `PATH`, for stubs of the host tools it runs
+  (`stubs/`: `test_network.py` installs `rbw.sh` there as `rbw`).
 
 The `http_server` fixture is an HTTP server on the host's loopback
 (`servers.py`): the instance reaches it only through celily's proxy. It records
