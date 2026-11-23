@@ -56,6 +56,8 @@ class Celily:
         self.home = root / "home"
         self.project = self.home / "project"
         self.config_dir = self.home / ".config" / "celily"
+        # First in celily's PATH: fakes of the host tools it runs (rbw).
+        self.bin = root / "bin"
         self.runtime_dir = runtime_dir
         # What the host and the cell provide.
         self.cell_fragment = {
@@ -68,6 +70,7 @@ class Celily:
         # fragment, so every run goes through merging.
         self.fragment = {}
         self.project.mkdir(parents=True)
+        self.bin.mkdir()
 
     def _write_config(self):
         fragments = self.config_dir / "fragments"
@@ -96,7 +99,7 @@ class Celily:
         self._write_config()
         # Nothing else from the caller leaks in (proxy variables, GIT_*).
         env = {
-            "PATH": os.environ["PATH"],
+            "PATH": os.pathsep.join([str(self.bin), os.environ["PATH"]]),
             "HOME": str(self.home),
             "XDG_RUNTIME_DIR": str(self.runtime_dir),
             "RUST_LOG": "celily=info,celily_lib=info",

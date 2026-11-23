@@ -26,3 +26,7 @@ class Arch(Guest):
                 "ca-certificates-utils",
             ]
         )
+
+    def install_test_tools(self, instance):
+        # Synced by install_ca_tools.
+        instance.run(["pacman", "-S", "--noconfirm", "--needed", "bash", "curl"])

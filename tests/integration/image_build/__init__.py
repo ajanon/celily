@@ -1,9 +1,9 @@
 """The guest images: what celily launches in the tests.
 
-Every image has the CA trust tools, a user `dev` (1000:1000, celily's
-defaults), and boots to the running state (celily-config(5), IMAGE
-REQUIREMENTS). One module per distribution, implementing Guest; build()
-does the steps they share.
+Every image has the CA trust tools, the tools the tests run (bash and
+curl), a user `dev` (1000:1000, celily's defaults), and boots to the
+running state (celily-config(5), IMAGE REQUIREMENTS). One module per
+distribution, implementing Guest; build() does the steps they share.
 """
 
 import dataclasses
@@ -61,6 +61,10 @@ class Guest(ABC):
     def install_ca_tools(self, instance: Instance) -> None:
         """What celily needs to add its CA to the trust store."""
 
+    @abstractmethod
+    def install_test_tools(self, instance: Instance) -> None:
+        """What the tests run in the instance: bash and curl."""
+
     def add_user(self, instance: Instance) -> None:
         instance.run(["groupadd", f"--gid={GID}", USER])
         instance.run(["useradd", "--create-home", f"--uid={UID}", f"--gid={GID}", USER])
@@ -101,6 +105,7 @@ def build(guest, *, cli, project, pool, network):
             raise Failed(f"{guest.source} boots {state}, celily needs running")
         guest.wait_for_network(instance)
         guest.install_ca_tools(instance)
+        guest.install_test_tools(instance)
         guest.add_user(instance)
         # Generated again on first boot, one per instance.
         instance.run(["truncate", "--size=0", "/etc/machine-id"])

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import image_build
+import servers
 from backend.lxc import DAEMONS, Lxc
 from runner import Celily
 
@@ -114,3 +115,10 @@ def celily(celily_binary, backend, cell, tmp_path, runtime_dir):
         root=tmp_path,
         runtime_dir=runtime_dir,
     )
+
+
+@pytest.fixture
+def http_server():
+    """An HTTP server on the host's loopback (servers.HttpServer)."""
+    with servers.serve_http() as server:
+        yield server
