@@ -7,12 +7,15 @@ does the steps they share.
 """
 
 import dataclasses
+import time
 from abc import ABC, abstractmethod
 
 from command import Failed, run
 
 USER = "dev"
 UID = GID = 1000
+# What `systemctl is-system-running --wait` prints once the boot is over.
+BOOTED = {"running", "degraded", "maintenance"}
 
 
 def alias(distro):
@@ -85,7 +88,7 @@ def build(guest, *, lxc, project, pool, network):
     )
     try:
         # Booted, maybe degraded: fix_boot comes next.
-        instance.run(["systemctl", "is-system-running", "--wait"], check=False)
+        _wait_for_boot(instance)
         guest.fix_boot(instance)
         instance.run(["systemctl", "reset-failed"])
         state = instance.run(
@@ -107,3 +110,22 @@ def build(guest, *, lxc, project, pool, network):
         run([*lxc, "publish", instance.name, *in_project, f"--alias={name}"])
     finally:
         run([*lxc, "delete", "--force", instance.name, *in_project], check=False)
+
+
+def _wait_for_boot(instance, timeout=120):
+    """Until the boot is over, whatever its outcome. `lxc launch` returns
+    before systemd listens: --wait waits for the boot, not for the bus."""
+    deadline = time.monotonic() + timeout
+    while True:
+        proc = instance.run(
+            ["systemctl", "is-system-running", "--wait"],
+            check=False,
+            capture=True,
+            quiet=True,
+        )
+        if proc.stdout.strip() in BOOTED:
+            return
+        if time.monotonic() > deadline:
+            why = proc.stdout.strip() or proc.stderr.strip()
+            raise Failed(f"{instance.name} not booted after {timeout}s: {why}")
+        time.sleep(1)
