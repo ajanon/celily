@@ -3,7 +3,8 @@
 and backend; and the tests, run in them.
 
     driver.py up HOST --backend=B         start it, backend and images in
-    driver.py test HOST --backend=B --celily=PATH [-- PYTEST_ARGS...]
+    driver.py test HOST --backend=B --celily=PATH [--junitxml=PATH]
+                                          [-- PYTEST_ARGS...]
     driver.py down HOST --backend=B
     driver.py image [OPTIONS]             guest images, with your own lxc
 
@@ -106,12 +107,30 @@ def up(args):
 
 def test(args):
     vm = _vm(args)
-    vm.run(["rm", "-rf", "it", "it-tmp"])
+    vm.run(["rm", "-rf", "it", "it-tmp", "it-junit.xml"])
     vm.run(["mkdir", "it"])
     vm.extract({**_tests(), "celily": args.celily}, "it")
     # --basetemp: under HOME, no hidden component, for snap's lxc.
-    argv = ["uv", "run", "pytest", "--celily=celily", "--basetemp=../it-tmp"]
-    return vm.run([*argv, *args.pytest_args], workdir="it", check=False).returncode
+    argv = [
+        "uv",
+        "run",
+        "pytest",
+        "--celily=celily",
+        "--basetemp=../it-tmp",
+        "--junitxml=../it-junit.xml",
+    ]
+    code = vm.run([*argv, *args.pytest_args], workdir="it", check=False).returncode
+    if args.junitxml:
+        # Never a stale one, from an earlier run.
+        args.junitxml.unlink(missing_ok=True)
+        args.junitxml.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            vm.limactl("copy", f"{vm.name}:it-junit.xml", str(args.junitxml))
+        except Failed as err:
+            # pytest stopped before writing it: its output says why.
+            print(f"driver: no junit report: {err}", file=sys.stderr)
+            return code or 1
+    return code
 
 
 def down(args):
@@ -167,6 +186,11 @@ def main():
     vm_command("down", down)
     sub = vm_command("test", test)
     sub.add_argument("--celily", type=Path, required=True, help="the binary to test")
+    sub.add_argument(
+        "--junitxml",
+        type=Path,
+        help="copy pytest's junit report there, passed or failed",
+    )
     sub.add_argument("pytest_args", nargs="*", help="after --, passed to pytest")
 
     sub = commands.add_parser("image", help="build guest images with your lxc")
