@@ -64,8 +64,14 @@ Hosts: `archlinux` (`--backend=lxd-distro`) and `ubuntu-24.04`
 the host's distribution, into `target/<host>`. `up` starts the VM
 `celily-it-<host>-<backend>`, installs the backend and builds the guest images
 in it. `test` copies the tests and the binary in, and runs pytest there with the
-arguments after `--`. The VM stays until `down`: `test` can run again, and
+arguments after `--`; `--junitxml=PATH` copies its junit report back, failed
+tests or not. The VM stays until `down`: `test` can run again, and
 `limactl shell celily-it-<host>-<backend>` gets you in.
+
+`summary.py JUNIT` sums a report up in Markdown: the counts, and every test that
+did not pass with its message. CI makes it the job summary, and keeps the report
+itself as an artifact for 7 days: every test's output is in it, celily's log
+included.
 
 ## Writing tests
 
