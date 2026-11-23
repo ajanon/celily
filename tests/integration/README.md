@@ -16,11 +16,12 @@ pytest runs where the backend runs: it checks what celily leaves behind there.
   image under an alias (default `celily-it-arch`).
 
 Guest images (`celily-it-<distro>`, e.g. `celily-it-arch`) have the CA trust
-tools and a user `dev` (uid and gid 1000) with a home directory, and must boot
-to the `running` state (see `celily-config(5)`, IMAGE REQUIREMENTS).
-`driver.py image` builds them with your `lxc` (or `incus`, with
-`--backend=incus`), replacing previous ones (`--help` for the guests, project,
-pool and network). How is in `image_build/`, one module per guest distribution.
+tools, bash and curl (the tests run them), and a user `dev` (uid and gid 1000)
+with a home directory, and must boot to the `running` state (see
+`celily-config(5)`, IMAGE REQUIREMENTS). `driver.py image` builds them with your
+`lxc` (or `incus`, with `--backend=incus`), replacing previous ones (`--help`
+for the guests, project, pool and network). How is in `image_build/`, one module
+per guest distribution.
 
 ## Running
 
@@ -94,6 +95,14 @@ config, and runs celily from there the way a user does:
   logging all three fails too.
 - celily's log goes to the captured output: it shows when a test fails, and in
   the junit report.
+- `celily.bin`: first in celily's `PATH`, for fakes of the host tools it runs
+  (`test_network.py` puts an `rbw` there).
+
+The `http_server` fixture is an HTTP server on the host's loopback
+(`servers.py`): the instance reaches it only through celily's proxy. It records
+every connection and every request, so a test sees both what the proxy let
+through and what it did not. Rules name it by `host` and `port`; `url(path)`
+gives the URL to fetch.
 
 Tests run once per cell (guest distribution x instance kind): `arch-container`
 for now. `skip` always carries a reason; known bugs are `xfail(strict=True)`,
