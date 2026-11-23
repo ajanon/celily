@@ -1,26 +1,26 @@
 # Integration tests
 
 celily tested as a black box: the binary, run the way a user runs it, against a
-real LXD. `cargo test` covers the logic; these tests cover what only shows up
-with a real backend: instances, bridges, ACLs, the proxy, and whatever is left
-behind.
+real LXD or Incus. `cargo test` covers the logic; these tests cover what only
+shows up with a real backend: instances, bridges, ACLs, the proxy, and whatever
+is left behind.
 
 ## Requirements
 
-pytest runs on the LXD host itself: it checks what celily leaves behind there.
+pytest runs where the backend runs: it checks what celily leaves behind there.
 
-- LXD, usable without sudo.
+- LXD or Incus, usable without sudo.
 - A login session, with an `XDG_RUNTIME_DIR`.
 - Python and uv.
-- An LXD project (default `celily-it`) with `features.images=true`, holding the
-  guest image under an alias (default `celily-it-arch`).
+- A project (default `celily-it`) with `features.images=true`, holding the guest
+  image under an alias (default `celily-it-arch`).
 
 Guest images (`celily-it-<distro>`, e.g. `celily-it-arch`) have the CA trust
 tools and a user `dev` (uid and gid 1000) with a home directory, and must boot
 to the `running` state (see `celily-config(5)`, IMAGE REQUIREMENTS).
-`driver.py image` builds them with your `lxc`, replacing previous ones (`--help`
-for the guests, project, pool and network). How is in `image_build/`, one module
-per guest distribution.
+`driver.py image` builds them with your `lxc` (or `incus`, with
+`--backend=incus`), replacing previous ones (`--help` for the guests, project,
+pool and network). How is in `image_build/`, one module per guest distribution.
 
 ## Running
 
@@ -34,8 +34,11 @@ uv run pytest --celily=../../target/debug/celily
   (whatever `celily` is on `PATH` may be stale), and written with the `=`:
   pytest picks its rootdir before it knows the option takes a value, so a
   separate `PATH` is taken for a test path.
-- `--lxd-project NAME`: the project holding the images. Default: `celily-it`.
-- `--lxd-pool NAME`: the storage pool of the instances' root disks. Default:
+- `--backend lxd|incus`: the daemon celily runs instances on, as in the `kind`
+  of its `[backend]`. Default: `lxd`.
+- `--backend-project NAME`: the project holding the images. Default:
+  `celily-it`.
+- `--backend-pool NAME`: the storage pool of the instances' root disks. Default:
   `default`.
 - `-n auto`: run tests in parallel (pytest-xdist).
 - `-k arch-container`: only the tests of a cell (see below).
@@ -46,8 +49,8 @@ hidden directories in `HOME`.
 
 ### In a VM
 
-What CI does, per host (a Lima template) and backend, with Docker and Lima
-instead of LXD:
+What CI does, per host (a Lima template) and backend. Needs Docker and Lima, no
+backend of your own:
 
 ```
 python3 -m builder archlinux
@@ -57,8 +60,9 @@ tests/integration/driver.py test archlinux --backend=lxd-distro \
 tests/integration/driver.py down archlinux --backend=lxd-distro
 ```
 
-Hosts: `archlinux` (`--backend=lxd-distro`) and `ubuntu-24.04`
-(`--backend=lxd-snap`), one module each in `hosts/`.
+Hosts: `archlinux` (`--backend=lxd-distro` or `incus-distro`) and `ubuntu-24.04`
+(`--backend=lxd-snap`), one module each in `hosts/`. The backend says where it
+comes from: `distro` is the distribution's package.
 
 `python3 -m builder` (from the repository root) builds celily in a container of
 the host's distribution, into `target/<host>`. `up` starts the VM

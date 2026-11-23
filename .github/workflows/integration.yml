@@ -36,6 +36,8 @@ jobs:
         include:
           - host: archlinux
             backend: lxd-distro
+          - host: archlinux
+            backend: incus-distro
           - host: ubuntu-24.04
             backend: lxd-snap
     env:

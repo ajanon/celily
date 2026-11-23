@@ -27,13 +27,13 @@ def alias(distro):
 class Instance:
     """The instance an image is built from."""
 
-    lxc: list[str]  # the lxc command, maybe behind a prefix
+    cli: list[str]  # lxc or incus, maybe behind a prefix
     name: str
     project: str
 
     def run(self, argv, **kwargs):
         return run(
-            [*self.lxc, "exec", self.name, "--project", self.project, "--", *argv],
+            [*self.cli, "exec", self.name, "--project", self.project, "--", *argv],
             **kwargs,
         )
 
@@ -50,7 +50,8 @@ class Guest(ABC):
         """The image it is built from, e.g. "images:archlinux"."""
 
     def fix_boot(self, instance: Instance) -> None:
-        """Make it boot to the running state: mask what fails in LXD."""
+        """Make it boot to the running state: mask what fails in a
+        container."""
 
     @abstractmethod
     def wait_for_network(self, instance: Instance) -> None:
@@ -65,19 +66,20 @@ class Guest(ABC):
         instance.run(["useradd", "--create-home", f"--uid={UID}", f"--gid={GID}", USER])
 
 
-def build(guest, *, lxc, project, pool, network):
+def build(guest, *, cli, project, pool, network):
     """Build the image of `guest` in `project`, replacing any previous one.
-    `lxc` is the command: ["lxc"], or behind a prefix running it elsewhere."""
+    `cli` is LXD's or Incus' (same commands): ["lxc"], ["incus"], or
+    behind a prefix running it elsewhere."""
     if run(
-        [*lxc, "query", f"/1.0/projects/{project}"], check=False, quiet=True
+        [*cli, "query", f"/1.0/projects/{project}"], check=False, quiet=True
     ).returncode:
-        run([*lxc, "project", "create", project, "--config=features.images=true"])
-    instance = Instance(lxc, f"celily-it-build-{guest.distro}", project)
+        run([*cli, "project", "create", project, "--config=features.images=true"])
+    instance = Instance(cli, f"celily-it-build-{guest.distro}", project)
     in_project = ["--project", project]
     # The project's default profile is empty: no root disk, no NIC.
     run(
         [
-            *lxc,
+            *cli,
             "launch",
             guest.source,
             instance.name,
@@ -102,18 +104,18 @@ def build(guest, *, lxc, project, pool, network):
         guest.add_user(instance)
         # Generated again on first boot, one per instance.
         instance.run(["truncate", "--size=0", "/etc/machine-id"])
-        run([*lxc, "stop", instance.name, *in_project])
+        run([*cli, "stop", instance.name, *in_project])
         name = alias(guest.distro)
         query = f"/1.0/images/aliases/{name}?project={project}"
-        if run([*lxc, "query", query], check=False, quiet=True).returncode == 0:
-            run([*lxc, "image", "delete", name, *in_project])
-        run([*lxc, "publish", instance.name, *in_project, f"--alias={name}"])
+        if run([*cli, "query", query], check=False, quiet=True).returncode == 0:
+            run([*cli, "image", "delete", name, *in_project])
+        run([*cli, "publish", instance.name, *in_project, f"--alias={name}"])
     finally:
-        run([*lxc, "delete", "--force", instance.name, *in_project], check=False)
+        run([*cli, "delete", "--force", instance.name, *in_project], check=False)
 
 
 def _wait_for_boot(instance, timeout=120):
-    """Until the boot is over, whatever its outcome. `lxc launch` returns
+    """Until the boot is over, whatever its outcome. `launch` returns
     before systemd listens: --wait waits for the boot, not for the bus."""
     deadline = time.monotonic() + timeout
     while True:

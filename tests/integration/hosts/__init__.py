@@ -7,6 +7,8 @@ the tests need in them. One module per distribution, implementing Host.
 import enum
 from abc import ABC, abstractmethod
 
+from backend.lxc import INCUS, LXD, Daemon
+
 LXD_CHANNEL = "6/stable"
 
 
@@ -16,6 +18,15 @@ class HostBackend(enum.StrEnum):
 
     LXD_SNAP = "lxd-snap"
     LXD_DISTRO = "lxd-distro"
+    INCUS_DISTRO = "incus-distro"
+
+    @property
+    def daemon(self) -> Daemon:
+        match self:
+            case HostBackend.LXD_SNAP | HostBackend.LXD_DISTRO:
+                return LXD
+            case HostBackend.INCUS_DISTRO:
+                return INCUS
 
 
 class Host(ABC):

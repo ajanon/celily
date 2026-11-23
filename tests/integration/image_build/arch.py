@@ -3,10 +3,12 @@ from image_build import Guest
 
 class Arch(Guest):
     distro = "arch"
+    # Each CLI's own `images` remote: images.lxd.canonical.com for LXD,
+    # images.linuxcontainers.org for Incus. Two builds of the image.
     source = "images:archlinux"
 
     def fix_boot(self, instance):
-        # No console in an LXD container: it fails, the system is degraded.
+        # No console in a container: it fails, the system is degraded.
         instance.run(["systemctl", "mask", "console-getty.service"])
 
     def wait_for_network(self, instance):

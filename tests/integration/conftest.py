@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 import image_build
-from backend.lxd import Lxd
+from backend.lxc import DAEMONS, Lxc
 from runner import Celily
 
 
@@ -30,8 +30,8 @@ class Cell:
 
 # Every test using the `celily` fixture runs once per cell: the cell is
 # part of the test id (test_true[arch-container]), so -k selects cells.
-# Containers only. VM cells need the host checked for KVM and LXD VM
-# support (skip with the reason otherwise), and a VM image.
+# Containers only. VM cells need the host checked for KVM and the
+# backend's VM support (skip with the reason otherwise), and a VM image.
 CELLS = [Cell("arch", "container")]
 
 
@@ -45,12 +45,18 @@ def pytest_addoption(parser):
         help="the celily binary under test (required, as --celily=PATH)",
     )
     group.addoption(
-        "--lxd-project",
-        default="celily-it",
-        help="the LXD project holding the guest images (default: %(default)s)",
+        "--backend",
+        choices=sorted(DAEMONS),
+        default="lxd",
+        help="the daemon celily runs instances on (default: %(default)s)",
     )
     group.addoption(
-        "--lxd-pool",
+        "--backend-project",
+        default="celily-it",
+        help="the project holding the guest images (default: %(default)s)",
+    )
+    group.addoption(
+        "--backend-pool",
         default="default",
         help="the storage pool of the instances' root disks (default: %(default)s)",
     )
@@ -71,10 +77,11 @@ def celily_binary(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-def lxd(pytestconfig):
-    return Lxd(
-        project=pytestconfig.getoption("--lxd-project"),
-        pool=pytestconfig.getoption("--lxd-pool"),
+def backend(pytestconfig):
+    return Lxc(
+        DAEMONS[pytestconfig.getoption("--backend")],
+        project=pytestconfig.getoption("--backend-project"),
+        pool=pytestconfig.getoption("--backend-pool"),
     )
 
 
@@ -99,10 +106,10 @@ def runtime_dir():
 
 
 @pytest.fixture
-def celily(celily_binary, lxd, cell, tmp_path, runtime_dir):
+def celily(celily_binary, backend, cell, tmp_path, runtime_dir):
     return Celily(
         binary=celily_binary,
-        backend=lxd,
+        backend=backend,
         cell=cell,
         root=tmp_path,
         runtime_dir=runtime_dir,
