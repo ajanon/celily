@@ -9,6 +9,12 @@ use crate::backend::{Device, ExecStdio, InstanceConfig};
 use crate::command::{AsyncCommandExt, CommandError, CommandExt};
 use crate::mount::AccessMode;
 
+/// The instance's own loopback, never the proxy: it is on the host, where
+/// loopback is the host's. Exact names, no CIDR (Node and Python's urllib
+/// don't parse it), and IPv6 both bare and bracketed (urllib matches
+/// `[::1]` only).
+const NO_PROXY: &str = "localhost,127.0.0.1,::1,[::1]";
+
 impl LxcBackend {
     /// The `api.InstancePut` projection of an [`InstanceConfig`]:
     /// everything `lxc init` takes through stdin -- description, config
@@ -226,10 +232,10 @@ impl crate::backend::InstanceBackend for LxcBackend {
             env_pairs.extend([
                 ("HTTP_PROXY", OsStr::new(proxy)),
                 ("HTTPS_PROXY", OsStr::new(proxy)),
-                ("NO_PROXY", OsStr::new("")),
+                ("NO_PROXY", OsStr::new(NO_PROXY)),
                 ("http_proxy", OsStr::new(proxy)),
                 ("https_proxy", OsStr::new(proxy)),
-                ("no_proxy", OsStr::new("")),
+                ("no_proxy", OsStr::new(NO_PROXY)),
                 ("NODE_USE_ENV_PROXY", OsStr::new("1")),
                 ("NODE_USE_SYSTEM_CA", OsStr::new("1")),
             ]);
