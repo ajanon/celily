@@ -512,7 +512,9 @@ running inside the *celily* process, that enforce the allowlist.
 	environment variables are forcibly injected into the container at
 	the highest priority -- they cannot be overridden by *--env* or
 	config. They are a convenience, not the boundary: a process can drop
-	them, and the ACL still applies.
+	them, and the ACL still applies. *NO_PROXY* lists the instance's
+	loopback (_localhost,127.0.0.1,::1,[::1]_): the proxy runs on the
+	host, where loopback is the host's.
 - A per-instance CA certificate is pushed into the container so
 	TLS-terminated connections through the proxy are trusted.
 

@@ -44,6 +44,10 @@ def curl(url):
     environment. Prints the body, then the status on a line of its own."""
     return [
         "curl",
+        # The servers are on the host's loopback, which celily's no_proxy
+        # sends to the instance's own.
+        "--noproxy",
+        "",
         "--silent",
         "--show-error",
         "--max-time",
@@ -127,3 +131,29 @@ def test_raw_tunnel_is_closed(celily, http_server):
     # It reached the proxy, which answered the CONNECT.
     assert result.stdout.startswith("HTTP/1."), "no answer to the CONNECT"
     assert http_server.connections == []
+
+
+# The instance's own loopback, by every name celily's no_proxy lists.
+LOOPBACK = ["localhost", "127.0.0.1", "[::1]"]
+
+# curl's exit code when nothing listens: what a client going direct to
+# the instance's own loopback gets, where the proxy would answer 403.
+CURL_COULDNT_CONNECT = 7
+
+
+def test_loopback_skips_the_proxy(celily):
+    """The proxy is on the host: loopback through it would be the host's,
+    never the instance's."""
+    script = r"""
+for host in "$@"; do
+    curl --silent --max-time 10 --output /dev/null "http://${host}:1/"
+    printf '%s %s\n' "${host}" "$?"
+done
+"""
+
+    result = celily.run("--", "bash", "-c", script, "bash", *LOOPBACK)
+
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == [
+        f"{host} {CURL_COULDNT_CONNECT}" for host in LOOPBACK
+    ]

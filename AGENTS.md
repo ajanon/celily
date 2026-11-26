@@ -370,7 +370,10 @@ forms: curl reads only `http_proxy`) are injected at the highest priority --
 they override `--env`, `--pass-env`, and `env`/`pass_env` entries with the same
 key. This is a convenience, not a security property: any process can drop them.
 The bridge ACL, which only lets TCP reach the proxy and TCP rules, is what keeps
-traffic on the proxy.
+traffic on the proxy. `NO_PROXY` is the instance's loopback,
+`localhost,127.0.0.1,::1,[::1]`: through the proxy (on the host) loopback would
+be the host's. No CIDR: Node and Python's urllib don't parse it, and `[::1]` is
+the form urllib matches.
 
 ## Secrets handling
 

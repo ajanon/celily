@@ -355,7 +355,8 @@ containers included, get a 403.
 that proxy-aware tools work transparently. They are a convenience, not
 the boundary: a process can drop them. Tools that ignore them reach
 nothing -- the bridge ACL rejects every TCP connection but those to the
-proxy and to TCP rules.
+proxy and to TCP rules. *NO_PROXY* (both cases) lists only the
+instance's loopback, which the proxy, on the host, cannot reach.
 
 Instances are created without any LXD/Incus profile: a profile could
 add a network interface outside the isolation bridge, extra devices, or
