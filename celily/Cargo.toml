@@ -19,7 +19,7 @@ clap_complete = "4"
 celily-lib = { path = "../celily-lib" }
 humantime = "2"
 merge = "0.2"
-nix = { version = "0.31", features = ["user"] }
+nix = { version = "0.32", features = ["user"] }
 serde = { version = "1", features = ["derive"] }
 tempfile = "3"
 thiserror = "2"
